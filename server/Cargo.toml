@@ -5,4 +5,6 @@ authors = ["davidpodhola <david.podhola@hsharp.software>"]
 
 [dependencies]
 nickel = "*"
+bson = "*"
+mongodb  = "*"
 
