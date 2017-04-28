@@ -17,3 +17,5 @@
 Thumbs.db
 
 server/.Cargo.toml.swp
+**/*.rs.swp
+**/target/debug/**

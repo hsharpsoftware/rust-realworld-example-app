@@ -4,3 +4,5 @@ version = "0.1.0"
 authors = ["davidpodhola <david.podhola@hsharp.software>"]
 
 [dependencies]
+nickel = "*"
+
