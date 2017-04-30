@@ -7,4 +7,7 @@ authors = ["davidpodhola <david.podhola@hsharp.software>"]
 nickel = "*"
 bson = "*"
 mongodb  = "*"
+clippy = {version = "*", optional = true}
 
+[features]
+default = []
