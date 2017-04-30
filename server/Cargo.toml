@@ -8,6 +8,7 @@ nickel = "*"
 bson = "*"
 mongodb  = "*"
 clippy = {version = "*", optional = true}
+iis = "*"
 
 [features]
 default = []

@@ -5,13 +5,13 @@ extern crate nickel;
 extern crate bson;
 extern crate mongodb;
 
+extern crate iis;
+
 use nickel::Nickel;
 
 use bson::Bson;
 use mongodb::{Client, ThreadedClient};
 use mongodb::db::ThreadedDatabase;
-
-use std::env;
 
 fn main() {
     let mut server = Nickel::new();
@@ -56,14 +56,11 @@ fn main() {
         }
     }
 
-    let port = match env::var("HTTP_PLATFORM_PORT") {
-        Ok(val) => val,
-        Err(e) => "6767".to_string(),
-    };
+    let port = iis::get_port();
 
-    let listenOn = format!("127.0.0.1:{}", port);
+    let listen_on = format!("127.0.0.1:{}", port);
 
-    println!("Listening on {}", listenOn);
+    println!("Listening on {}", listen_on);
 
-    server.listen(listenOn);
+    server.listen(listen_on);
 }
