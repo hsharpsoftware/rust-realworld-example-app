@@ -9,7 +9,10 @@ bson = "*"
 mongodb  = "*"
 clippy = {version = "*", optional = true}
 iis = "*"
-hyper = "*"
 
 [features]
 default = []
+
+[dependencies.hyper]
+version = "*"
+default-features = false
