@@ -1,6 +1,8 @@
 # ![RealWorld Example App](logo.png)
 
-> ### [YOUR_FRAMEWORK] codebase containing real world examples (CRUD, auth, advanced patterns, etc) that adheres to the [RealWorld](https://github.com/gothinkster/realworld-example-apps) spec and API.
+[![Build status](https://ci.appveyor.com/api/projects/status/8s17p2vh2f4e8a2y?svg=true)](https://ci.appveyor.com/project/davidpodhola/rust-realworld-example-app)
+
+> ### Rust codebase containing real world examples (CRUD, auth, advanced patterns, etc) that adheres to the [RealWorld](https://github.com/gothinkster/realworld-example-apps) spec and API.
 
 
 ### [Demo]()&nbsp;&nbsp;&nbsp;&nbsp;[RealWorld](https://github.com/gothinkster/realworld)
