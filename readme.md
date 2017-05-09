@@ -18,6 +18,11 @@ For more information on how to this works with other frontends/backends, head ov
 # How it works
 
 > Describe the general architecture of your app here
+> Test on local with
+> 
+> - [http://127.0.0.1:6767/](http://127.0.0.1:6767/)
+> - [http://127.0.0.1:6767/api/test1/123](http://127.0.0.1:6767/api/test1/123)
+> - [http://127.0.0.1:6767/api/test2/507c7f79bcf86cd7994f6c0e](http://127.0.0.1:6767/api/test2/507c7f79bcf86cd7994f6c0e)
 
 # Getting started
 

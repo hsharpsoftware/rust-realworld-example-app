@@ -10,10 +10,13 @@ extern crate hyper;
 
 extern crate nickel_jwt_session;
 
-use nickel::{Nickel, HttpRouter, Request, Response, MiddlewareResult};
+use nickel::{Nickel, HttpRouter, Request, Response, MiddlewareResult, NickelError};
 use hyper::header::{AccessControlAllowOrigin, AccessControlAllowHeaders, Headers};
+use nickel::status::StatusCode;
 
 use nickel_jwt_session::{SessionMiddleware, TokenLocation};
+
+use bson::oid::ObjectId;
 
 fn enable_cors<'mw>(_req: &mut Request, mut res: Response<'mw>) -> MiddlewareResult<'mw> {
     // Set appropriate headers
@@ -36,8 +39,23 @@ fn main() {
     server.utilize(SessionMiddleware::new("conduit").using(TokenLocation::AuthorizationHeader).expiration_time(60));
 
     server.utilize(router! {
-        get "**" => |_req, _res| {
+        get "/" => |request, response| {
             "Hello from the test application written in Rust on Nickel running in Azure Web App!"
+        }
+        get "/api/test1/:id" => |request, response| {      
+            format!("This is test: {:?}", request.param("id"))
+        }
+        get "/api/test2/:id" => |request, response| {      
+            // Get the objectId from the request params
+            let object_id = request.param("id").unwrap();
+
+            // Match the user id to an bson ObjectId
+            let id = match ObjectId::with_string(object_id) {
+                Ok(oid) => oid,
+                Err(e) => return response.send(format!("{}", e))
+            };
+
+            format!("{}",id)
         }
     });
 
@@ -81,5 +99,5 @@ fn main() {
 
     println!("Listening on {}", listen_on);
 
-    server.listen(listen_on);
+    server.listen(listen_on).unwrap();
 }
