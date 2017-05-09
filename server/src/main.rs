@@ -40,7 +40,7 @@ fn main() {
 
     server.utilize(router! {
         get "/" => |request, response| {
-            "Hello from the test application written in Rust on Nickel running in Azure Web App!"
+            "<html><body><h1>Hello from <a href='https://github.com/hsharpsoftware/rust-realworld-example-app'>the test application written in Rust on Nickel</a> running in Azure Web App!</h1></body></html>"
         }
         get "/api/test1/:id" => |request, response| {      
             format!("This is test: {:?}", request.param("id"))
