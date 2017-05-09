@@ -16,3 +16,7 @@ default = []
 [dependencies.hyper]
 version = "*"
 default-features = false
+
+[dependencies.cookie]
+version = "*"
+default-features = false

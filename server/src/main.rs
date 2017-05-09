@@ -8,8 +8,12 @@ extern crate mongodb;
 extern crate iis;
 extern crate hyper;
 
+//extern crate nickel_jwt_session;
+
 use nickel::{Nickel, HttpRouter, Request, Response, MiddlewareResult};
 use hyper::header::{AccessControlAllowOrigin, AccessControlAllowHeaders, Headers};
+
+//use nickel_jwt_session::SessionMiddleware;
 
 fn enable_cors<'mw>(_req: &mut Request, mut res: Response<'mw>) -> MiddlewareResult<'mw> {
     // Set appropriate headers
@@ -29,6 +33,7 @@ use mongodb::db::ThreadedDatabase;
 fn main() {
     let mut server = Nickel::new();
     server.utilize(enable_cors);
+    //server.utilize(SessionMiddleware::new("conduit").expiration_time(60));    
 
     server.utilize(router! {
         get "**" => |_req, _res| {
