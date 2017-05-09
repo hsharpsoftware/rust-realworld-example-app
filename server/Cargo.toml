@@ -9,6 +9,7 @@ bson = "*"
 mongodb  = "*"
 clippy = {version = "*", optional = true}
 iis = "*"
+nickel-jwt-session = { version = "*",path = "../lib/nickel-jwt-session" }
 
 [features]
 default = []
