@@ -33,6 +33,23 @@ use bson::Bson;
 use mongodb::{Client, ThreadedClient};
 use mongodb::db::ThreadedDatabase;
 
+extern crate serde;
+#[macro_use]
+extern crate serde_json;
+
+#[macro_use]
+extern crate serde_derive;
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
+struct User {
+    email: String,
+    token: String,
+    username : String,
+    bio : String,
+    image: String
+}
+
 fn main() {
     let mut server = Nickel::new();
     server.utilize(enable_cors);
