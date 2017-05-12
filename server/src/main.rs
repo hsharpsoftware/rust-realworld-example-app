@@ -11,7 +11,6 @@ extern crate hyper;
 extern crate nickel_jwt_session;
 
 extern crate serde;
-#[macro_use]
 extern crate serde_json;
 
 #[macro_use]
@@ -19,8 +18,7 @@ extern crate serde_derive;
 
 extern crate chrono;
 
-use nickel::{Nickel, HttpRouter, Request, Response, MiddlewareResult, NickelError};
-use hyper::header::{AccessControlAllowOrigin, AccessControlAllowHeaders, Headers};
+use nickel::{Nickel, Request, Response, MiddlewareResult};
 use nickel::status::StatusCode;
 
 use nickel_jwt_session::{SessionMiddleware, TokenLocation};
@@ -56,6 +54,7 @@ struct User {
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
+#[allow(non_snake_case)]
 struct Article {
     slug: String,
     title: String,
@@ -80,6 +79,7 @@ struct Profile {
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
+#[allow(non_snake_case)]
 struct Comment {
     id: i32,
     createdAt: DateTime<UTC>,
@@ -94,7 +94,7 @@ fn main() {
     server.utilize(SessionMiddleware::new("conduit").using(TokenLocation::AuthorizationHeader).expiration_time(60));
 
     server.utilize(router! {
-        get "/" => |request, response| {
+        get "/" => |_request, response| {
             "<html><body><h1>Hello from <a href='https://github.com/hsharpsoftware/rust-realworld-example-app'>the test application written in Rust on Nickel</a> running in Azure Web App!</h1></body></html>"
         }
         get "/api/test1/:id" => |request, response| {      
@@ -105,7 +105,7 @@ fn main() {
             let object_id = request.param("id").unwrap();
 
             // Match the user id to an bson ObjectId
-            let id = match ObjectId::with_string(object_id) {
+            let _id = match ObjectId::with_string(object_id) {
                 Ok(oid) => {
                     response.set(StatusCode::Ok);
                     return response.send(format!("Test id {} works!", oid))
