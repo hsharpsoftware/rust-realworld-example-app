@@ -10,6 +10,15 @@ extern crate hyper;
 
 extern crate nickel_jwt_session;
 
+extern crate serde;
+#[macro_use]
+extern crate serde_json;
+
+#[macro_use]
+extern crate serde_derive;
+
+extern crate chrono;
+
 use nickel::{Nickel, HttpRouter, Request, Response, MiddlewareResult, NickelError};
 use hyper::header::{AccessControlAllowOrigin, AccessControlAllowHeaders, Headers};
 use nickel::status::StatusCode;
@@ -17,6 +26,12 @@ use nickel::status::StatusCode;
 use nickel_jwt_session::{SessionMiddleware, TokenLocation};
 
 use bson::oid::ObjectId;
+
+use bson::Bson;
+use mongodb::{Client, ThreadedClient};
+use mongodb::db::ThreadedDatabase;
+
+use chrono::prelude::*;
 
 fn enable_cors<'mw>(_req: &mut Request, mut res: Response<'mw>) -> MiddlewareResult<'mw> {
     // Set appropriate headers
@@ -29,17 +44,6 @@ fn enable_cors<'mw>(_req: &mut Request, mut res: Response<'mw>) -> MiddlewareRes
     res.next_middleware()
 }
 
-use bson::Bson;
-use mongodb::{Client, ThreadedClient};
-use mongodb::db::ThreadedDatabase;
-
-extern crate serde;
-#[macro_use]
-extern crate serde_json;
-
-#[macro_use]
-extern crate serde_derive;
-
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
 struct User {
@@ -48,6 +52,30 @@ struct User {
     username : String,
     bio : String,
     image: String
+}
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
+struct Article {
+    slug: String,
+    title: String,
+    description : String,
+    body : String,
+    tagList: Vec<String>,
+    createdAt: DateTime<UTC>,
+    updatedAt: DateTime<UTC>,
+    favorited : bool,
+    favoritesCount : i32,
+    author : Profile
+}
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
+struct Profile {
+    username: String,
+    bio: String,
+    image : String,
+    following : bool
 }
 
 fn main() {
