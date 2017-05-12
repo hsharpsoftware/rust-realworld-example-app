@@ -107,7 +107,9 @@ fn main() {
             // Match the user id to an bson ObjectId
             let id = match ObjectId::with_string(object_id) {
                 Ok(oid) => oid,
-                Err(e) => return response.send(format!("{}", e))
+                Err(e) => {
+                    return response.send(format!("{}", e))
+                }
             };
 
             format!("{}",id)
