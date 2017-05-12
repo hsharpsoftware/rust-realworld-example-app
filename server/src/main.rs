@@ -78,6 +78,16 @@ struct Profile {
     following : bool
 }
 
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
+struct Comment {
+    id: i32,
+    createdAt: DateTime<UTC>,
+    updatedAt: DateTime<UTC>,
+    body : String,
+    author : Profile
+}
+
 fn main() {
     let mut server = Nickel::new();
     server.utilize(enable_cors);
