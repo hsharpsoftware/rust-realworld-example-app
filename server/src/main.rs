@@ -100,19 +100,21 @@ fn main() {
         get "/api/test1/:id" => |request, response| {      
             format!("This is test: {:?}", request.param("id"))
         }
-        get "/api/test2/:id" => |request, response| {      
+        get "/api/test2/:id" => |request, mut response| {      
             // Get the objectId from the request params
             let object_id = request.param("id").unwrap();
 
             // Match the user id to an bson ObjectId
             let id = match ObjectId::with_string(object_id) {
-                Ok(oid) => oid,
+                Ok(oid) => {
+                    response.set(StatusCode::Ok);
+                    return response.send(format!("Test id {} works!", oid))
+                }
                 Err(e) => {
-                    return response.send(format!("{}", e))
+                    response.set(StatusCode::UnprocessableEntity);
+                    return response.send(format!("Error {}", e))
                 }
             };
-
-            format!("{}",id)
         }
     });
 
