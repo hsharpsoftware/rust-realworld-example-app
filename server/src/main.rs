@@ -88,6 +88,18 @@ struct Comment {
     author : Profile
 }
 
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
+struct InternalError {
+    errors : ErrorDetail
+}
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
+struct ErrorDetail {
+    message : String
+}
+
 fn main() {
     let mut server = Nickel::new();
     server.utilize(enable_cors);
@@ -112,7 +124,9 @@ fn main() {
                 }
                 Err(e) => {
                     response.set(StatusCode::UnprocessableEntity);
-                    return response.send(format!("Error {}", e))
+                    let error1 = InternalError { errors : ErrorDetail { message : e.to_string() }  };
+                    let j = serde_json::to_string(&error1);
+                    return response.send(format!("{}", j.unwrap()))
                 }
             };
         }
