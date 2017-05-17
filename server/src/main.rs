@@ -18,6 +18,8 @@ extern crate serde_derive;
 
 extern crate chrono;
 
+extern crate crypto;
+
 use nickel::{Nickel, Request, Response, MiddlewareResult};
 use nickel::status::StatusCode;
 
@@ -129,6 +131,10 @@ fn main() {
                     return response.send(format!("{}", j.unwrap()))
                 }
             };
+        }
+        get "/api/pwd/:id" => |request, response| {      
+            let password = request.param("id");
+            format!("hashed password: {:?}", crypto::pbkdf2::pbkdf2_simple(password.unwrap(), 10000).unwrap() )
         }
     });
 
