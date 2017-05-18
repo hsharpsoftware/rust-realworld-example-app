@@ -140,10 +140,15 @@ struct Login {
     user : LoginDetails
 }
 
+static connection_string: &'static str = r#"server=tcp:127.0.0.1,1433;integratedSecurity=true;"#;
+static databaseName: &'static str = "Conduit";
+
 fn main() {
     let mut server = Nickel::new();
     server.utilize(enable_cors);
     server.utilize(SessionMiddleware::new("conduit").using(TokenLocation::AuthorizationHeader).expiration_time(60 * 30));
+
+    let mut lp = Core::new().unwrap();
 
     server.utilize(router! {
         get "/" => |_request, response| {
@@ -175,7 +180,24 @@ fn main() {
             format!("hashed password: {:?}", crypto::pbkdf2::pbkdf2_simple(password.unwrap(), 10000).unwrap() )
         }
         post "/api/users" => |request, response| {      
-            let registration = request.json_as::<Registration>().unwrap();            
+            let registration = request.json_as::<Registration>().unwrap();  
+
+            let mut sql = Core::new().unwrap();
+            let insertUser = SqlConnection::connect(sql.handle(), connection_string)
+                .and_then(|conn| conn.simple_query(
+                    format!("INSERT INTO [{0}].[dbo].[Users]
+                        ([Email]
+                        ,[Token]
+                        ,[UserName])
+                    VALUES
+                        ('{1}'
+                        ,'{2}'
+                        ,'{3}')", databaseName, registration.user.email, crypto::pbkdf2::pbkdf2_simple(&registration.user.password, 10000).unwrap(), registration.user.username
+                    )
+                ).for_each_row(|row| {Ok(())})
+            );
+            sql.run(insertUser).unwrap(); 
+
             format!("Hello {}", 
                 registration.user.username 
             )
@@ -209,17 +231,26 @@ fn main() {
         }
     });
 
-    let mut lp = Core::new().unwrap();
-    let connection_string = r#"server=tcp:127.0.0.1,1433;integratedSecurity=true;"#.to_owned();
-
-    let databaseName = "Conduit";
-
-    let createDatabase = SqlConnection::connect(lp.handle(), connection_string.as_str()).and_then(|conn| {
+    let createDatabase = SqlConnection::connect(lp.handle(), connection_string).and_then(|conn| {
         conn.simple_query(
             format!("IF db_id('{0}') IS NULL CREATE DATABASE [{0}]", databaseName)
-        ).for_each_row(|row| {
-            Ok(())
-        })
+        ).for_each_row(|row| {Ok(())})
+    }).and_then( |conn| {
+        conn.simple_query(
+            format!("if object_id('{0}..Users') is null CREATE TABLE [{0}].[dbo].[Users](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[Email] [nvarchar](50) NOT NULL,
+	[Token] [varchar](250) NOT NULL,
+	[UserName] [nvarchar](150) NOT NULL,
+	[Bio] [nvarchar](max) NULL,
+	[Image] [nchar](250) NULL,
+ CONSTRAINT [PK_Users] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+", databaseName)
+        ).for_each_row(|row| {Ok(())})
     });
     lp.run(createDatabase).unwrap();    
 
