@@ -26,6 +26,7 @@ use nickel::{Nickel, Request, Response, MiddlewareResult, JsonBody};
 use nickel::status::StatusCode;
 
 use nickel_jwt_session::{SessionMiddleware, TokenLocation};
+use nickel_jwt_session::SessionRequestExtensions;
 
 use bson::oid::ObjectId;
 
@@ -176,6 +177,15 @@ fn main() {
                 login.user.email, 
                 crypto::pbkdf2::pbkdf2_check( &login.user.password, &storedHash ).unwrap() 
             )
+        }
+        get "/api/user" => |request, mut response| {      
+            match request.authorized_user() {
+                Some(user) => {
+                    // Whatever an authorized user is allowed to do
+                    format!("This is test: {:?}", request.param("id"))
+                },
+                None => {response.set(StatusCode::Forbidden);"".to_string()}
+            }                        
         }
     });
 
