@@ -27,6 +27,7 @@ use nickel::status::StatusCode;
 
 use nickel_jwt_session::{SessionMiddleware, TokenLocation};
 use nickel_jwt_session::SessionRequestExtensions;
+use nickel_jwt_session::SessionResponseExtensions;
 
 use bson::oid::ObjectId;
 
@@ -170,13 +171,23 @@ fn main() {
                 registration.user.username 
             )
         }
-        post "/api/users/login" => |request, response| {      
+        post "/api/users/login" => |request, mut response| {      
             let login = request.json_as::<Login>().unwrap();            
             let storedHash = "$rpbkdf2$0$AAAnEA==$Ebk2XzlaoFbX7W7qezg+GA==$NNbdiYlEB5/yZWL+T4oKu40FmQsqBEafi8fPcWuvDV0=$";
-            format!("Hello {}, password match: {}", 
-                login.user.email, 
-                crypto::pbkdf2::pbkdf2_check( &login.user.password, &storedHash ).unwrap() 
-            )
+            let authenticated_user = crypto::pbkdf2::pbkdf2_check( &login.user.password, &storedHash );
+            match authenticated_user {
+                Ok(valid) => {
+                    if valid {
+                        response.set_jwt_user(&login.user.email);
+                    } else {
+                        response.set(StatusCode::Unauthorized);
+                    }
+                }
+                Err(e) => {
+                    response.set(StatusCode::Unauthorized);
+                }
+            }            
+            "".to_string()
         }
         get "/api/user" => |request, mut response| {      
             match request.authorized_user() {
