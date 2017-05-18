@@ -117,6 +117,18 @@ struct Registration {
     user : RegistrationDetails
 }
 
+#[derive(Debug)]
+#[derive(RustcDecodable, RustcEncodable)]
+struct LoginDetails {
+    email: String,
+    password : String
+}
+
+#[derive(RustcDecodable, RustcEncodable)]
+struct Login {
+    user : LoginDetails
+}
+
 fn main() {
     let mut server = Nickel::new();
     server.utilize(enable_cors);
@@ -151,10 +163,19 @@ fn main() {
             let password = request.param("id");
             format!("hashed password: {:?}", crypto::pbkdf2::pbkdf2_simple(password.unwrap(), 10000).unwrap() )
         }
-
         post "/api/users" => |request, response| {      
-            let registration = request.json_as::<Registration>().unwrap();
-            format!("Hello {}", registration.user.username)
+            let registration = request.json_as::<Registration>().unwrap();            
+            format!("Hello {}", 
+                registration.user.username 
+            )
+        }
+        post "/api/users/login" => |request, response| {      
+            let login = request.json_as::<Login>().unwrap();            
+            let storedHash = "$rpbkdf2$0$AAAnEA==$Ebk2XzlaoFbX7W7qezg+GA==$NNbdiYlEB5/yZWL+T4oKu40FmQsqBEafi8fPcWuvDV0=$";
+            format!("Hello {}, password match: {}", 
+                login.user.email, 
+                crypto::pbkdf2::pbkdf2_check( &login.user.password, &storedHash ).unwrap() 
+            )
         }
     });
 
