@@ -16,6 +16,9 @@ serde_derive = "1.0.2"
 chrono = { version = "0.3", features = ["serde", "rustc-serialize"] }
 rust-crypto = "*"
 rustc-serialize = "*"
+tiberius = { version = "*",path = "../lib/tiberius" }
+futures = "*"
+tokio-core = "*"
 
 [features]
 default = []

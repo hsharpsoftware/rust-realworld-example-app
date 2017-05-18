@@ -22,6 +22,15 @@ extern crate crypto;
 
 extern crate rustc_serialize;
 
+extern crate futures;
+extern crate tokio_core;
+extern crate tiberius;
+
+use futures::Future;
+use tokio_core::reactor::Core;
+use tiberius::SqlConnection;
+use tiberius::stmt::ResultStreamExt;
+
 use nickel::{Nickel, Request, Response, MiddlewareResult, JsonBody};
 use nickel::status::StatusCode;
 
@@ -200,39 +209,17 @@ fn main() {
         }
     });
 
-    if cfg!(db = "mongodb") {
-        let client =
-            Client::connect("localhost", 27017).expect("Failed to initialize standalone client.");
+    let mut lp = Core::new().unwrap();
+    let connection_string = r#"server=tcp:127.0.0.1,1433;integratedSecurity=true;"#.to_owned();
 
-        let coll = client.db("test").collection("movies");
-
-        let doc = doc! { "title" => "Jaws",
-                      "array" => [ 1, 2, 3 ] };
-
-        // Insert document into 'test.movies' collection
-        coll.insert_one(doc.clone(), None)
-            .ok()
-            .expect("Failed to insert document.");
-
-        // Find the document and receive a cursor
-        let mut cursor = coll.find(Some(doc.clone()), None)
-            .ok()
-            .expect("Failed to execute find.");
-
-        let item = cursor.next();
-
-        // cursor.next() returns an Option<Result<Document>>
-        match item {
-            Some(Ok(doc)) => {
-                match doc.get("title") {
-                    Some(&Bson::String(ref title)) => println!("{}", title),
-                    _ => panic!("Expected title to be a string!"),
-                }
-            }
-            Some(Err(_)) => panic!("Failed to get next from server!"),
-            None => panic!("Server returned no results!"),
-        }
-    }
+    let future = SqlConnection::connect(lp.handle(), connection_string.as_str()).and_then(|conn| {
+        conn.simple_query("SELECT 1+2").for_each_row(|row| {
+            let val: i32 = row.get(0);
+            assert_eq!(val, 3i32);
+            Ok(())
+        })
+    });
+    lp.run(future).unwrap();
 
     let port = iis::get_port();
 
