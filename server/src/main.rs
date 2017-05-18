@@ -212,6 +212,8 @@ fn main() {
     let mut lp = Core::new().unwrap();
     let connection_string = r#"server=tcp:127.0.0.1,1433;integratedSecurity=true;"#.to_owned();
 
+    let databaseName = "Conduit";
+
     let future = SqlConnection::connect(lp.handle(), connection_string.as_str()).and_then(|conn| {
         conn.simple_query("SELECT 1+2").for_each_row(|row| {
             let val: i32 = row.get(0);
@@ -220,6 +222,39 @@ fn main() {
         })
     });
     lp.run(future).unwrap();
+    let future2 = SqlConnection::connect(lp.handle(), connection_string.as_str()).and_then(|conn| {
+        conn.simple_query("SELECT 3+4").for_each_row(|row| {
+            let val: i32 = row.get(0);
+            assert_eq!(val, 7i32);
+            Ok(())
+        })
+    });
+    lp.run(future2).unwrap();
+
+    let dropDatabase = SqlConnection::connect(lp.handle(), connection_string.as_str()).and_then(|conn| {
+        conn.simple_query(
+            format!("WHILE EXISTS(select NULL from sys.databases where name='{0}')
+BEGIN
+    DECLARE @SQL varchar(max)
+    SELECT @SQL = COALESCE(@SQL,'') + 'Kill ' + Convert(varchar, SPId) + ';'
+    FROM MASTER..SysProcesses
+    WHERE DBId = DB_ID(N'{0}') AND SPId <> @@SPId
+    EXEC(@SQL)
+    DROP DATABASE [{0}]
+END", databaseName)
+        ).for_each_row(|row| {
+            Ok(())
+        })
+    });
+    lp.run(dropDatabase).unwrap();
+    let createDatabase = SqlConnection::connect(lp.handle(), connection_string.as_str()).and_then(|conn| {
+        conn.simple_query(
+            format!("CREATE DATABASE {0}", databaseName)
+        ).for_each_row(|row| {
+            Ok(())
+        })
+    });
+    lp.run(createDatabase).unwrap();    
 
     let port = iis::get_port();
 
