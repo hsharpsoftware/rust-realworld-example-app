@@ -20,3 +20,4 @@ server/.Cargo.toml.swp
 **/*.rs.swp
 **/target/debug/**
 **/target/x86_64-pc-windows-gnu/
+.vscode/settings.json

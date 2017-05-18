@@ -192,7 +192,10 @@ fn main() {
                     VALUES
                         ('{1}'
                         ,'{2}'
-                        ,'{3}')", databaseName, registration.user.email, crypto::pbkdf2::pbkdf2_simple(&registration.user.password, 10000).unwrap(), registration.user.username
+                        ,'{3}')", databaseName, 
+                        str::replace( &registration.user.email, "'", "''" ), 
+                        str::replace( &crypto::pbkdf2::pbkdf2_simple(&registration.user.password, 10000).unwrap(), "'", "''" ), 
+                        str::replace( &registration.user.username, "'", "''" )
                     )
                 ).for_each_row(|row| {Ok(())})
             );
