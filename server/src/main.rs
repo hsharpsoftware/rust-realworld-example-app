@@ -20,7 +20,9 @@ extern crate chrono;
 
 extern crate crypto;
 
-use nickel::{Nickel, Request, Response, MiddlewareResult};
+extern crate rustc_serialize;
+
+use nickel::{Nickel, Request, Response, MiddlewareResult, JsonBody};
 use nickel::status::StatusCode;
 
 use nickel_jwt_session::{SessionMiddleware, TokenLocation};
@@ -102,6 +104,19 @@ struct ErrorDetail {
     message : String
 }
 
+#[derive(Debug)]
+#[derive(RustcDecodable, RustcEncodable)]
+struct RegistrationDetails {
+    email: String,
+    username : String,
+    password : String
+}
+
+#[derive(RustcDecodable, RustcEncodable)]
+struct Registration {
+    user : RegistrationDetails
+}
+
 fn main() {
     let mut server = Nickel::new();
     server.utilize(enable_cors);
@@ -135,6 +150,11 @@ fn main() {
         get "/api/pwd/:id" => |request, response| {      
             let password = request.param("id");
             format!("hashed password: {:?}", crypto::pbkdf2::pbkdf2_simple(password.unwrap(), 10000).unwrap() )
+        }
+
+        post "/api/users" => |request, response| {      
+            let registration = request.json_as::<Registration>().unwrap();
+            format!("Hello {}", registration.user.username)
         }
     });
 
