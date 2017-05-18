@@ -134,7 +134,7 @@ struct Login {
 fn main() {
     let mut server = Nickel::new();
     server.utilize(enable_cors);
-    server.utilize(SessionMiddleware::new("conduit").using(TokenLocation::AuthorizationHeader).expiration_time(60));
+    server.utilize(SessionMiddleware::new("conduit").using(TokenLocation::AuthorizationHeader).expiration_time(60 * 30));
 
     server.utilize(router! {
         get "/" => |_request, response| {
@@ -193,7 +193,7 @@ fn main() {
             match request.authorized_user() {
                 Some(user) => {
                     // Whatever an authorized user is allowed to do
-                    format!("This is test: {:?}", request.param("id"))
+                    format!("This is test: {:?}", user)
                 },
                 None => {response.set(StatusCode::Forbidden);"".to_string()}
             }                        
