@@ -155,11 +155,8 @@ struct Config {
 #[derive(Debug, Deserialize)]
 struct DatabaseConfig {
     connection_string: Option<String>,
-    database_nam: Option<String>,
+    database_name: Option<String>,
 }
-
-static connection_string: &'static str = r#"server=tcp:127.0.0.1,1433;integratedSecurity=true;"#;
-static databaseName: &'static str = "Conduit";
 
 fn main() {
     let path = Path::new("conduit.toml");
@@ -180,6 +177,10 @@ fn main() {
 
     let toml_str : &str = &content;
     let config: Config = toml::from_str(toml_str).unwrap();
+
+    let database_config = config.database.unwrap();
+    let connection_string = database_config.connection_string;
+    let databaseName = database_config.database_name;
 
     let mut server = Nickel::new();
     server.utilize(enable_cors);
@@ -220,7 +221,7 @@ fn main() {
             let registration = request.json_as::<Registration>().unwrap();  
 
             let mut sql = Core::new().unwrap();
-            let insertUser = SqlConnection::connect(sql.handle(), connection_string)
+            let insertUser = SqlConnection::connect(sql.handle(), connection_string.unwrap().as_str() )
                 .and_then(|conn| conn.simple_query(
                     format!("INSERT INTO [{0}].[dbo].[Users]
                         ([Email]
@@ -229,7 +230,7 @@ fn main() {
                     VALUES
                         ('{1}'
                         ,'{2}'
-                        ,'{3}')", databaseName, 
+                        ,'{3}')", databaseName.unwrap(), 
                         str::replace( &registration.user.email, "'", "''" ), 
                         str::replace( &crypto::pbkdf2::pbkdf2_simple(&registration.user.password, 10000).unwrap(), "'", "''" ), 
                         str::replace( &registration.user.username, "'", "''" )
@@ -271,9 +272,9 @@ fn main() {
         }
     });
 
-    let createDatabase = SqlConnection::connect(lp.handle(), connection_string).and_then(|conn| {
+    let createDatabase = SqlConnection::connect(lp.handle(), connection_string.unwrap().as_str() ).and_then(|conn| {
         conn.simple_query(
-            format!("IF db_id('{0}') IS NULL CREATE DATABASE [{0}]", databaseName)
+            format!("IF db_id('{0}') IS NULL CREATE DATABASE [{0}]", databaseName.unwrap())
         ).for_each_row(|row| {Ok(())})
     }).and_then( |conn| {
         conn.simple_query(
@@ -289,7 +290,7 @@ fn main() {
 	[Id] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
-", databaseName)
+", databaseName.unwrap())
         ).for_each_row(|row| {Ok(())})
     });
     lp.run(createDatabase).unwrap();    
