@@ -269,21 +269,35 @@ fn main() {
         }
         post "/api/users/login" => |request, mut response| {      
             let login = request.json_as::<Login>().unwrap();            
-            let storedHash = "$rpbkdf2$0$AAAnEA==$Ebk2XzlaoFbX7W7qezg+GA==$NNbdiYlEB5/yZWL+T4oKu40FmQsqBEafi8fPcWuvDV0=$";
-            let authenticated_user = crypto::pbkdf2::pbkdf2_check( &login.user.password, &storedHash );
-            match authenticated_user {
-                Ok(valid) => {
-                    if valid {
-                        response.set_jwt_user(&login.user.email);
-                    } else {
-                        response.set(StatusCode::Unauthorized);
-                    }
-                }
-                Err(e) => {
-                    response.set(StatusCode::Unauthorized);
-                }
-            }            
-            "".to_string()
+
+            let mut sql = Core::new().unwrap();
+            let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
+                .and_then(|conn| conn.simple_query(
+                    format!("SELECT [Token] FROM [{0}].[dbo].[Users]
+                        WHERE [Email] = '{1}'", &**databaseName, 
+                        str::replace( &login.user.email, "'", "''" )
+                    )
+                ).for_each_row(|row| {
+                    let storedHash : &str = row.get(0);
+                    let authenticated_user = crypto::pbkdf2::pbkdf2_check( &login.user.password, storedHash );
+                    match authenticated_user {
+                        Ok(valid) => {
+                            if valid {
+                                response.set_jwt_user(&login.user.email);
+                            } else {
+                                response.set(StatusCode::Unauthorized);
+                            }
+                        }
+                        Err(e) => {
+                            response.set(StatusCode::Unauthorized);
+                        }
+                    }            
+                    Ok(())
+                })
+            );
+            sql.run(getUser).unwrap(); 
+
+            format!("Email: {}", &login.user.email).to_string()
         }
         get "/api/user" => |request, mut response| {      
             match request.authorized_user() {
