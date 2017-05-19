@@ -158,8 +158,10 @@ struct DatabaseConfig {
     database_name: Option<String>,
 }
 
+static config_file_name : &'static str = r#"conduit.toml"#;
+
 fn main() {
-    let path = Path::new("conduit.toml");
+    let path = Path::new(config_file_name);
     let display = path.display();
 
     let mut file = match File::open(&path) {
@@ -173,14 +175,25 @@ fn main() {
         Err(why) => panic!("couldn't read {}: {}", display,
                                                    why.description()),
         Ok(_) => print!("{} contains:\n{}", display, content),
-    }
+    };
 
     let toml_str : &str = &content;
     let config: Config = toml::from_str(toml_str).unwrap();
 
-    let database_config = config.database.unwrap();
-    let connection_string = database_config.connection_string;
-    let databaseName = database_config.database_name;
+    let mut database_config : DatabaseConfig = match config.database {
+        Some(database_config) => database_config,
+        None => panic!("database not present in {}", config_file_name),
+    };
+    
+    let connection_string :&str = match database_config.connection_string {
+        Some(connection_string) => connection_string.as_str(),
+        None => panic!("connection string not present in database_config in {}", config_file_name),
+    };
+
+    let databaseName :&str = match database_config.database_name {
+        Some(databaseName) => databaseName.as_str(),
+        None => panic!("connection string not present in database_config in {}", config_file_name),
+    };    
 
     let mut server = Nickel::new();
     server.utilize(enable_cors);
@@ -221,7 +234,7 @@ fn main() {
             let registration = request.json_as::<Registration>().unwrap();  
 
             let mut sql = Core::new().unwrap();
-            let insertUser = SqlConnection::connect(sql.handle(), connection_string.unwrap().as_str() )
+            let insertUser = SqlConnection::connect(sql.handle(), connection_string )
                 .and_then(|conn| conn.simple_query(
                     format!("INSERT INTO [{0}].[dbo].[Users]
                         ([Email]
@@ -230,7 +243,7 @@ fn main() {
                     VALUES
                         ('{1}'
                         ,'{2}'
-                        ,'{3}')", databaseName.unwrap(), 
+                        ,'{3}')", databaseName, 
                         str::replace( &registration.user.email, "'", "''" ), 
                         str::replace( &crypto::pbkdf2::pbkdf2_simple(&registration.user.password, 10000).unwrap(), "'", "''" ), 
                         str::replace( &registration.user.username, "'", "''" )
@@ -272,9 +285,9 @@ fn main() {
         }
     });
 
-    let createDatabase = SqlConnection::connect(lp.handle(), connection_string.unwrap().as_str() ).and_then(|conn| {
+    let createDatabase = SqlConnection::connect(lp.handle(), connection_string ).and_then(|conn| {
         conn.simple_query(
-            format!("IF db_id('{0}') IS NULL CREATE DATABASE [{0}]", databaseName.unwrap())
+            format!("IF db_id('{0}') IS NULL CREATE DATABASE [{0}]", databaseName)
         ).for_each_row(|row| {Ok(())})
     }).and_then( |conn| {
         conn.simple_query(
@@ -290,7 +303,7 @@ fn main() {
 	[Id] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
-", databaseName.unwrap())
+", databaseName)
         ).for_each_row(|row| {Ok(())})
     });
     lp.run(createDatabase).unwrap();    
