@@ -20,6 +20,7 @@ tiberius = { version = "*",path = "../lib/tiberius" }
 futures = "*"
 tokio-core = "*"
 toml = "0.4"
+lazy_static = "0.2"
 
 [features]
 default = []

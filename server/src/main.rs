@@ -28,6 +28,9 @@ extern crate tiberius;
 
 extern crate toml;
 
+#[macro_use]
+extern crate lazy_static;
+
 use futures::Future;
 use tokio_core::reactor::Core;
 use tiberius::SqlConnection;
@@ -52,6 +55,8 @@ use std::error::Error;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
+use std::env;
+use std::path::PathBuf;
 
 fn enable_cors<'mw>(_req: &mut Request, mut res: Response<'mw>) -> MiddlewareResult<'mw> {
     // Set appropriate headers
@@ -160,8 +165,20 @@ struct DatabaseConfig {
 
 static config_file_name : &'static str = r#"conduit.toml"#;
 
-fn main() {
-    let path = Path::new(config_file_name);
+lazy_static! {
+    pub static ref connection_string : String = match get_database_config().connection_string {
+            Some(cnn) => cnn,
+            None => panic!("connection string not present in database_config in {}", config_file_name),
+        };
+    pub static ref databaseName : String = match get_database_config().database_name {
+            Some(dbName) => dbName,
+            None => panic!("connection string not present in database_config in {}", config_file_name),
+        };  
+}
+
+fn get_database_config() -> DatabaseConfig {
+    let mut path = PathBuf::from(env::current_dir().unwrap());
+    path.push(config_file_name);
     let display = path.display();
 
     let mut file = match File::open(&path) {
@@ -175,7 +192,7 @@ fn main() {
         Err(why) => panic!("couldn't read {}: {}", display,
                                                    why.description()),
         Ok(_) => print!("{} contains:\n{}", display, content),
-    };
+    }
 
     let toml_str : &str = &content;
     let config: Config = toml::from_str(toml_str).unwrap();
@@ -184,17 +201,11 @@ fn main() {
         Some(database_config) => database_config,
         None => panic!("database not present in {}", config_file_name),
     };
-    
-    let connection_string :&str = match database_config.connection_string {
-        Some(connection_string) => connection_string.as_str(),
-        None => panic!("connection string not present in database_config in {}", config_file_name),
-    };
 
-    let databaseName :&str = match database_config.database_name {
-        Some(databaseName) => databaseName.as_str(),
-        None => panic!("connection string not present in database_config in {}", config_file_name),
-    };    
+    database_config
+}
 
+fn main() {    
     let mut server = Nickel::new();
     server.utilize(enable_cors);
     server.utilize(SessionMiddleware::new("conduit").using(TokenLocation::AuthorizationHeader).expiration_time(60 * 30));
@@ -234,7 +245,7 @@ fn main() {
             let registration = request.json_as::<Registration>().unwrap();  
 
             let mut sql = Core::new().unwrap();
-            let insertUser = SqlConnection::connect(sql.handle(), connection_string )
+            let insertUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
                 .and_then(|conn| conn.simple_query(
                     format!("INSERT INTO [{0}].[dbo].[Users]
                         ([Email]
@@ -243,7 +254,7 @@ fn main() {
                     VALUES
                         ('{1}'
                         ,'{2}'
-                        ,'{3}')", databaseName, 
+                        ,'{3}')", &**databaseName, 
                         str::replace( &registration.user.email, "'", "''" ), 
                         str::replace( &crypto::pbkdf2::pbkdf2_simple(&registration.user.password, 10000).unwrap(), "'", "''" ), 
                         str::replace( &registration.user.username, "'", "''" )
@@ -285,28 +296,28 @@ fn main() {
         }
     });
 
-    let createDatabase = SqlConnection::connect(lp.handle(), connection_string ).and_then(|conn| {
-        conn.simple_query(
-            format!("IF db_id('{0}') IS NULL CREATE DATABASE [{0}]", databaseName)
-        ).for_each_row(|row| {Ok(())})
-    }).and_then( |conn| {
-        conn.simple_query(
-            format!("if object_id('{0}..Users') is null CREATE TABLE [{0}].[dbo].[Users](
-	[Id] [int] IDENTITY(1,1) NOT NULL,
-	[Email] [nvarchar](50) NOT NULL,
-	[Token] [varchar](250) NOT NULL,
-	[UserName] [nvarchar](150) NOT NULL,
-	[Bio] [nvarchar](max) NULL,
-	[Image] [nchar](250) NULL,
- CONSTRAINT [PK_Users] PRIMARY KEY CLUSTERED 
-(
-	[Id] ASC
-)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
-) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
-", databaseName)
-        ).for_each_row(|row| {Ok(())})
-    });
-    lp.run(createDatabase).unwrap();    
+    let createDatabase = SqlConnection::connect(lp.handle(), connection_string.as_str() ).and_then(|conn| {
+            conn.simple_query(
+                format!("IF db_id('{0}') IS NULL CREATE DATABASE [{0}]", &**databaseName)
+            ).for_each_row(|row| {Ok(())})
+        }).and_then( |conn| {
+            conn.simple_query(
+                format!("if object_id('{0}..Users') is null CREATE TABLE [{0}].[dbo].[Users](
+        [Id] [int] IDENTITY(1,1) NOT NULL,
+        [Email] [nvarchar](50) NOT NULL,
+        [Token] [varchar](250) NOT NULL,
+        [UserName] [nvarchar](150) NOT NULL,
+        [Bio] [nvarchar](max) NULL,
+        [Image] [nchar](250) NULL,
+    CONSTRAINT [PK_Users] PRIMARY KEY CLUSTERED 
+    (
+        [Id] ASC
+    )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+    ) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+    ", &**databaseName )
+            ).for_each_row(|row| {Ok(())})
+        });
+        lp.run(createDatabase).unwrap(); 
 
     let port = iis::get_port();
 
