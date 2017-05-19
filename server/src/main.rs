@@ -26,6 +26,8 @@ extern crate futures;
 extern crate tokio_core;
 extern crate tiberius;
 
+extern crate toml;
+
 use futures::Future;
 use tokio_core::reactor::Core;
 use tiberius::SqlConnection;
@@ -45,6 +47,11 @@ use mongodb::{Client, ThreadedClient};
 use mongodb::db::ThreadedDatabase;
 
 use chrono::prelude::*;
+
+use std::error::Error;
+use std::fs::File;
+use std::io::prelude::*;
+use std::path::Path;
 
 fn enable_cors<'mw>(_req: &mut Request, mut res: Response<'mw>) -> MiddlewareResult<'mw> {
     // Set appropriate headers
@@ -140,10 +147,40 @@ struct Login {
     user : LoginDetails
 }
 
+#[derive(Debug, Deserialize)]
+struct Config {
+    database: Option<DatabaseConfig>,
+}  
+
+#[derive(Debug, Deserialize)]
+struct DatabaseConfig {
+    connection_string: Option<String>,
+    database_nam: Option<String>,
+}
+
 static connection_string: &'static str = r#"server=tcp:127.0.0.1,1433;integratedSecurity=true;"#;
 static databaseName: &'static str = "Conduit";
 
 fn main() {
+    let path = Path::new("conduit.toml");
+    let display = path.display();
+
+    let mut file = match File::open(&path) {
+        Err(why) => panic!("couldn't open {}: {}", display,
+                                                   why.description()),
+        Ok(file) => file,
+    };
+
+    let mut content = String::new();
+    match file.read_to_string(&mut content) {
+        Err(why) => panic!("couldn't read {}: {}", display,
+                                                   why.description()),
+        Ok(_) => print!("{} contains:\n{}", display, content),
+    }
+
+    let toml_str : &str = &content;
+    let config: Config = toml::from_str(toml_str).unwrap();
+
     let mut server = Nickel::new();
     server.utilize(enable_cors);
     server.utilize(SessionMiddleware::new("conduit").using(TokenLocation::AuthorizationHeader).expiration_time(60 * 30));

@@ -19,6 +19,7 @@ rustc-serialize = "*"
 tiberius = { version = "*",path = "../lib/tiberius" }
 futures = "*"
 tokio-core = "*"
+toml = "0.4"
 
 [features]
 default = []
