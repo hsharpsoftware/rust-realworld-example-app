@@ -168,11 +168,11 @@ static config_file_name : &'static str = r#"conduit.toml"#;
 lazy_static! {
     pub static ref connection_string : String = match get_database_config().connection_string {
             Some(cnn) => cnn,
-            None => panic!("connection string not present in database_config in {}", config_file_name),
+            None => panic!("connection string not present in [database] section in {}", config_file_name),
         };
     pub static ref databaseName : String = match get_database_config().database_name {
             Some(dbName) => dbName,
-            None => panic!("connection string not present in database_config in {}", config_file_name),
+            None => panic!("database name not present in [database] section in {}", config_file_name),
         };  
 }
 
