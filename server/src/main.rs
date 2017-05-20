@@ -1,13 +1,8 @@
-#[macro_use]
-extern crate nickel;
-
 #[macro_use(bson, doc)]
 extern crate bson;
 
 extern crate iis;
 extern crate hyper;
-
-extern crate nickel_jwt_session;
 
 extern crate serde;
 extern crate serde_json;
@@ -18,8 +13,6 @@ extern crate serde_derive;
 extern crate chrono;
 
 extern crate crypto;
-
-extern crate rustc_serialize;
 
 extern crate futures;
 extern crate tokio_core;
@@ -35,13 +28,6 @@ use tokio_core::reactor::Core;
 use tiberius::SqlConnection;
 use tiberius::stmt::ResultStreamExt;
 
-use nickel::{Nickel, Request, Response, MiddlewareResult, JsonBody};
-use nickel::status::StatusCode;
-
-use nickel_jwt_session::{SessionMiddleware, TokenLocation};
-use nickel_jwt_session::SessionRequestExtensions;
-use nickel_jwt_session::SessionResponseExtensions;
-
 use bson::oid::ObjectId;
 
 use bson::Bson;
@@ -55,16 +41,7 @@ use std::path::Path;
 use std::env;
 use std::path::PathBuf;
 
-fn enable_cors<'mw>(_req: &mut Request, mut res: Response<'mw>) -> MiddlewareResult<'mw> {
-    // Set appropriate headers
-
-    // see https://github.com/nickel-org/nickel.rs/issues/365#issuecomment-234772648
-    res.headers_mut().set_raw("Access-Control-Allow-Origin", vec![b"*".to_vec()]);
-    res.headers_mut().set_raw("Access-Control-Allow-Headers", vec![b"Origin X-Requested-With Content-Type Accept".to_vec()]);
-
-    // Pass control to the next middleware
-    res.next_middleware()
-}
+use hyper::server::{Server, Request, Response};
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
@@ -125,26 +102,26 @@ struct ErrorDetail {
 }
 
 #[derive(Debug)]
-#[derive(RustcDecodable, RustcEncodable)]
+#[derive(Serialize, Deserialize)]
 struct RegistrationDetails {
     email: String,
     username : String,
     password : String
 }
 
-#[derive(RustcDecodable, RustcEncodable)]
+#[derive(Serialize, Deserialize)]
 struct Registration {
     user : RegistrationDetails
 }
 
 #[derive(Debug)]
-#[derive(RustcDecodable, RustcEncodable)]
+#[derive(Serialize, Deserialize)]
 struct LoginDetails {
     email: String,
     password : String
 }
 
-#[derive(RustcDecodable, RustcEncodable)]
+#[derive(Serialize, Deserialize)]
 struct Login {
     user : LoginDetails
 }
@@ -202,111 +179,12 @@ fn get_database_config() -> DatabaseConfig {
     database_config
 }
 
+fn hello(req: Request, res: Response) {
+    // handle things here
+}
+
 fn main() {    
-    let mut server = Nickel::new();
-    server.utilize(enable_cors);
-    server.utilize(SessionMiddleware::new("conduit").using(TokenLocation::AuthorizationHeader).expiration_time(60 * 30));
-
     let mut lp = Core::new().unwrap();
-
-    server.utilize(router! {
-        get "/" => |_request, response| {
-            "<html><body><h1>Hello from <a href='https://github.com/hsharpsoftware/rust-realworld-example-app'>the test application written in Rust on Nickel</a> running in Azure Web App!</h1></body></html>"
-        }
-        get "/api/test1/:id" => |request, response| {      
-            format!("This is test: {:?}", request.param("id"))
-        }
-        get "/api/test2/:id" => |request, mut response| {      
-            // Get the objectId from the request params
-            let object_id = request.param("id").unwrap();
-
-            // Match the user id to an bson ObjectId
-            let _id = match ObjectId::with_string(object_id) {
-                Ok(oid) => {
-                    response.set(StatusCode::Ok);
-                    return response.send(format!("Test id {} works!", oid))
-                }
-                Err(e) => {
-                    response.set(StatusCode::UnprocessableEntity);
-                    let error1 = InternalError { errors : ErrorDetail { message : e.to_string() }  };
-                    let j = serde_json::to_string(&error1);
-                    return response.send(format!("{}", j.unwrap()))
-                }
-            };
-        }
-        get "/api/pwd/:id" => |request, response| {      
-            let password = request.param("id");
-            format!("hashed password: {:?}", crypto::pbkdf2::pbkdf2_simple(password.unwrap(), 10000).unwrap() )
-        }
-        post "/api/users" => |request, response| {      
-            let registration = request.json_as::<Registration>().unwrap();  
-
-            let mut sql = Core::new().unwrap();
-            let insertUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
-                .and_then(|conn| conn.simple_query(
-                    format!("INSERT INTO [{0}].[dbo].[Users]
-                        ([Email]
-                        ,[Token]
-                        ,[UserName])
-                    VALUES
-                        ('{1}'
-                        ,'{2}'
-                        ,'{3}')", &**databaseName, 
-                        str::replace( &registration.user.email, "'", "''" ), 
-                        str::replace( &crypto::pbkdf2::pbkdf2_simple(&registration.user.password, 10000).unwrap(), "'", "''" ), 
-                        str::replace( &registration.user.username, "'", "''" )
-                    )
-                ).for_each_row(|row| {Ok(())})
-            );
-            sql.run(insertUser).unwrap(); 
-
-            format!("Hello {}", 
-                registration.user.username 
-            )
-        }
-        post "/api/users/login" => |request, mut response| {      
-            let login = request.json_as::<Login>().unwrap();            
-
-            let mut sql = Core::new().unwrap();
-            let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
-                .and_then(|conn| conn.simple_query(
-                    format!("SELECT [Token] FROM [{0}].[dbo].[Users]
-                        WHERE [Email] = '{1}'", &**databaseName, 
-                        str::replace( &login.user.email, "'", "''" )
-                    )
-                ).for_each_row(|row| {
-                    let storedHash : &str = row.get(0);
-                    let authenticated_user = crypto::pbkdf2::pbkdf2_check( &login.user.password, storedHash );
-                    match authenticated_user {
-                        Ok(valid) => {
-                            if valid {
-                                response.set_jwt_user(&login.user.email);
-                            } else {
-                                response.set(StatusCode::Unauthorized);
-                            }
-                        }
-                        Err(e) => {
-                            response.set(StatusCode::Unauthorized);
-                        }
-                    }            
-                    Ok(())
-                })
-            );
-            sql.run(getUser).unwrap(); 
-
-            format!("Email: {}", &login.user.email).to_string()
-        }
-        get "/api/user" => |request, mut response| {      
-            match request.authorized_user() {
-                Some(user) => {
-                    // Whatever an authorized user is allowed to do
-                    format!("This is test: {:?}", user)
-                },
-                None => {response.set(StatusCode::Forbidden);"".to_string()}
-            }                        
-        }
-    });
-
     let createDatabase = SqlConnection::connect(lp.handle(), connection_string.as_str() ).and_then(|conn| {
             conn.simple_query(
                 format!("IF db_id('{0}') IS NULL CREATE DATABASE [{0}]", &**databaseName)
@@ -332,9 +210,10 @@ fn main() {
 
     let port = iis::get_port();
 
-    let listen_on = format!("127.0.0.1:{}", port);
+    let listen_on = format!("0.0.0.0:{}", port);
 
     println!("Listening on {}", listen_on);
 
-    server.listen(listen_on).unwrap();
+    Server::http(listen_on).unwrap().handle(hello).unwrap();    
+
 }
