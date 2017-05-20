@@ -23,6 +23,10 @@ extern crate toml;
 #[macro_use]
 extern crate lazy_static;
 
+extern crate reroute;
+
+extern crate jwt;
+
 use futures::Future;
 use tokio_core::reactor::Core;
 use tiberius::SqlConnection;
@@ -42,6 +46,18 @@ use std::env;
 use std::path::PathBuf;
 
 use hyper::server::{Server, Request, Response};
+use reroute::{RouterBuilder, Captures};
+use hyper::header::{Authorization, Bearer};
+use hyper::{Get, Post};
+use hyper::status::StatusCode;
+
+use crypto::sha2::Sha256;
+
+use jwt::{
+    Header,
+    Registered,
+    Token,
+};
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
@@ -179,8 +195,66 @@ fn get_database_config() -> DatabaseConfig {
     database_config
 }
 
-fn hello(req: Request, res: Response) {
-    // handle things here
+fn new_token(user_id: &str, password: &str) -> Option<String> {
+    let header: jwt::Header = Default::default();
+    let claims = jwt::Registered {
+        iss: Some("mikkyang.com".into()),
+        sub: Some(user_id.into()),
+        ..Default::default()
+    };
+    let token = Token::new(header, claims);
+
+    token.signed(b"secret_key", Sha256::new()).ok()
+}
+
+fn login(token: &str) -> Option<String> {
+    let token = Token::<Header, Registered>::parse(token).unwrap();
+
+    if token.verify(b"secret_key", Sha256::new()) {
+        token.claims.sub
+    } else {
+        None
+    }
+}
+
+fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
+    let mut body = String::new();
+    let _ = req.read_to_string(&mut body);    
+    let login : Login = serde_json::from_str(&body).unwrap();    
+
+    let mut sql = Core::new().unwrap();
+    let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
+        .and_then(|conn| conn.simple_query(
+            format!("SELECT [Token] FROM [{0}].[dbo].[Users]
+                WHERE [Email] = '{1}'", &**databaseName, 
+                str::replace( &login.user.email, "'", "''" )
+            )
+        ).for_each_row(|row| {
+            let storedHash : &str = row.get(0);
+            let authenticated_user = crypto::pbkdf2::pbkdf2_check( &login.user.password, storedHash );
+            *res.status_mut() = StatusCode::Unauthorized;
+
+            match authenticated_user {
+                Ok(valid) => {
+                    if valid {                     
+                        let token = new_token(&login.user.email, &login.user.password).unwrap();
+
+                        res.headers_mut().set(
+                            Authorization(
+                                Bearer {
+                                    token: token.to_owned()
+                                }
+                            )
+                        );
+                        *res.status_mut() = StatusCode::Ok;
+                    }
+                }
+                _ => {}
+            }            
+            Ok(())
+        })
+    );
+    sql.run(getUser).unwrap(); 
 }
 
 fn main() {    
@@ -214,6 +288,13 @@ fn main() {
 
     println!("Listening on {}", listen_on);
 
-    Server::http(listen_on).unwrap().handle(hello).unwrap();    
+    let mut builder = RouterBuilder::new();
+
+    // Use raw strings so you don't need to escape patterns.
+    builder.post(r"/api/users/login", authentication_handler);   
+
+    let router = builder.finalize().unwrap(); 
+
+    Server::http(listen_on).unwrap().handle(router).unwrap();  
 
 }

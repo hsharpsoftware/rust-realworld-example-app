@@ -17,6 +17,8 @@ futures = "*"
 tokio-core = "*"
 toml = "0.4"
 lazy_static = "0.2"
+reroute = "0.3.2"
+jwt="*"
 
 [features]
 default = []
