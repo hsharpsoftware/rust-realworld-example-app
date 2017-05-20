@@ -6,7 +6,6 @@ authors = ["davidpodhola <david.podhola@hsharp.software>"]
 [dependencies]
 nickel = "*"
 bson = "*"
-mongodb  = "*"
 clippy = {version = "*", optional = true}
 iis = "*"
 nickel-jwt-session = "0.6.0"

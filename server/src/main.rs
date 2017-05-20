@@ -3,7 +3,6 @@ extern crate nickel;
 
 #[macro_use(bson, doc)]
 extern crate bson;
-extern crate mongodb;
 
 extern crate iis;
 extern crate hyper;
@@ -46,8 +45,6 @@ use nickel_jwt_session::SessionResponseExtensions;
 use bson::oid::ObjectId;
 
 use bson::Bson;
-use mongodb::{Client, ThreadedClient};
-use mongodb::db::ThreadedDatabase;
 
 use chrono::prelude::*;
 
