@@ -217,6 +217,75 @@ fn login(token: &str) -> Option<String> {
     }
 }
 
+fn registration_handler(mut req: Request, mut res: Response, _: Captures) {
+    let mut body = String::new();
+    let _ = req.read_to_string(&mut body);    
+    let registration : Registration = serde_json::from_str(&body).unwrap();     
+
+    let mut sql = Core::new().unwrap();
+    let insertUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
+        .and_then(|conn| conn.simple_query(
+            format!("INSERT INTO [{0}].[dbo].[Users]
+                ([Email]
+                ,[Token]
+                ,[UserName])
+            VALUES
+                ('{1}'
+                ,'{2}'
+                ,'{3}')", &**databaseName, 
+                str::replace( &registration.user.email, "'", "''" ), 
+                str::replace( &crypto::pbkdf2::pbkdf2_simple(&registration.user.password, 10000).unwrap(), "'", "''" ), 
+                str::replace( &registration.user.username, "'", "''" )
+            )
+        ).for_each_row(|row| {Ok(())})
+    );
+    sql.run(insertUser).unwrap();     
+}
+
+fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
+    let token = req.headers.get::<Authorization<Bearer>>(); 
+    match token {
+        Some(token) => {
+            let jwt = &token.0.token;
+            let logged_in_user = login(&jwt);  
+            let mut result : Option<User> = None; 
+
+            match logged_in_user {
+                Some(logged_in_user) => {
+                    println!("logged_in_user {}", &logged_in_user);
+                    let mut sql = Core::new().unwrap();
+                    let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
+                        .and_then(|conn| conn.simple_query(                            
+                            format!("SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [{0}].[dbo].[Users]
+                                WHERE [Email] = '{1}'", &**databaseName, 
+                                str::replace( &logged_in_user, "'", "''" )
+                            )
+                        ).for_each_row(|row| {
+                            let email : &str = row.get(0);
+                            let token : &str = row.get(1);
+                            let user_name : &str = row.get(2);
+                            let bio : &str = row.get(3);
+                            let image : &str = row.get(4);
+                            result = Some(User{ 
+                                email:email.to_string(), token:token.to_string(), bio:bio.to_string(),
+                                image:image.to_string(), username:user_name.to_string()
+                            });
+                            Ok(())
+                        })
+                    );
+                    sql.run(getUser).unwrap(); 
+                    res.send(b"Hello World!").unwrap();
+                },
+                _ => {
+                }
+            }
+        }
+        _ => {
+
+        }
+    }
+}
+
 fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
@@ -271,7 +340,7 @@ fn main() {
         [Token] [varchar](250) NOT NULL,
         [UserName] [nvarchar](150) NOT NULL,
         [Bio] [nvarchar](max) NULL,
-        [Image] [nchar](250) NULL,
+        [Image] [nvarchar](250) NULL,
     CONSTRAINT [PK_Users] PRIMARY KEY CLUSTERED 
     (
         [Id] ASC
@@ -292,6 +361,8 @@ fn main() {
 
     // Use raw strings so you don't need to escape patterns.
     builder.post(r"/api/users/login", authentication_handler);   
+    builder.post(r"/api/users", registration_handler);   
+    builder.get(r"/api/user", get_current_user_handler);   
 
     let router = builder.finalize().unwrap(); 
 
