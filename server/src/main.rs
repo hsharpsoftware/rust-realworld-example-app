@@ -225,14 +225,14 @@ fn registration_handler(mut req: Request, mut res: Response, _: Captures) {
     let mut sql = Core::new().unwrap();
     let insertUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
         .and_then(|conn| conn.simple_query(
-            format!("INSERT INTO [{0}].[dbo].[Users]
+            format!("INSERT INTO [dbo].[Users]
                 ([Email]
                 ,[Token]
                 ,[UserName])
             VALUES
                 ('{1}'
                 ,'{2}'
-                ,'{3}')", &**databaseName, 
+                ,'{3}') --{0}", &**databaseName, 
                 str::replace( &registration.user.email, "'", "''" ), 
                 str::replace( &crypto::pbkdf2::pbkdf2_simple(&registration.user.password, 10000).unwrap(), "'", "''" ), 
                 str::replace( &registration.user.username, "'", "''" )
@@ -256,8 +256,8 @@ fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
                     let mut sql = Core::new().unwrap();
                     let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
                         .and_then(|conn| conn.simple_query(                            
-                            format!("SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [{0}].[dbo].[Users]
-                                WHERE [Email] = '{1}'", &**databaseName, 
+                            format!("SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users]
+                                WHERE [Email] = '{1}' --{0}", &**databaseName, 
                                 str::replace( &logged_in_user, "'", "''" )
                             )
                         ).for_each_row(|row| {
@@ -286,6 +286,10 @@ fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
     }
 }
 
+fn test_handler(mut req: Request, mut res: Response, _: Captures) {
+    res.send(b"Test works.").unwrap();
+}
+
 fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
@@ -294,8 +298,8 @@ fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
     let mut sql = Core::new().unwrap();
     let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
         .and_then(|conn| conn.simple_query(
-            format!("SELECT [Token] FROM [{0}].[dbo].[Users]
-                WHERE [Email] = '{1}'", &**databaseName, 
+            format!("SELECT [Token] FROM [dbo].[Users]
+                WHERE [Email] = '{1}' --{0}", &**databaseName, 
                 str::replace( &login.user.email, "'", "''" )
             )
         ).for_each_row(|row| {
@@ -328,6 +332,7 @@ fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
 
 fn main() {    
     let mut lp = Core::new().unwrap();
+    /*
     let createDatabase = SqlConnection::connect(lp.handle(), connection_string.as_str() ).and_then(|conn| {
             conn.simple_query(
                 format!("IF db_id('{0}') IS NULL CREATE DATABASE [{0}]", &**databaseName)
@@ -350,7 +355,7 @@ fn main() {
             ).for_each_row(|row| {Ok(())})
         });
         lp.run(createDatabase).unwrap(); 
-
+    */
     let port = iis::get_port();
 
     let listen_on = format!("0.0.0.0:{}", port);
@@ -363,6 +368,7 @@ fn main() {
     builder.post(r"/api/users/login", authentication_handler);   
     builder.post(r"/api/users", registration_handler);   
     builder.get(r"/api/user", get_current_user_handler);   
+    builder.get(r"/test", test_handler);   
 
     let router = builder.finalize().unwrap(); 
 
