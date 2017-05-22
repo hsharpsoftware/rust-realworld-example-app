@@ -4,22 +4,21 @@ version = "0.1.0"
 authors = ["davidpodhola <david.podhola@hsharp.software>"]
 
 [dependencies]
-nickel = "*"
 bson = "*"
 clippy = {version = "*", optional = true}
 iis = "*"
-nickel-jwt-session = "0.6.0"
 serde = "1.0.2"
 serde_json = "1.0"
 serde_derive = "1.0.2"
 chrono = { version = "0.3", features = ["serde", "rustc-serialize"] }
 rust-crypto = "*"
-rustc-serialize = "*"
-tiberius = { version = "*",path = "../lib/tiberius" }
+tiberius = { git = "https://github.com/steffengy/tiberius" }
 futures = "*"
 tokio-core = "*"
 toml = "0.4"
 lazy_static = "0.2"
+reroute = "0.3.2"
+jwt="*"
 
 [features]
 default = []
