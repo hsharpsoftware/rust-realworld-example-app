@@ -1,3 +1,0 @@
-[database]
-connection_string = "server=tcp:127.0.0.1,1433;integratedSecurity=true;"
-database_name = "Conduit"
