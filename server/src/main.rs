@@ -236,11 +236,9 @@ fn registration_handler(mut req: Request, mut res: Response, _: Captures) {
     let username : &str = &registration.user.username;
 
     let mut lp = Core::new().unwrap();
-    SqlConnection::connect(lp.handle(), connection_string.as_str())
-    .and_then( 
-        |conn| { 
-            ::futures::finished((conn.prepare(
-                "
+    let future = SqlConnection::connect(lp.handle(), connection_string.as_str())
+    .and_then(|conn| {
+        conn.query( "
         INSERT INTO [dbo].[Users]
             ([Email]
             ,[Token]
@@ -248,13 +246,9 @@ fn registration_handler(mut req: Request, mut res: Response, _: Captures) {
         VALUES
             (@Email
             ,@Token
-            ,@UserName)" 
-            ), conn))
-        } 
-    )
-    .and_then(|(stmt, conn)| {
-        conn.query( &stmt, &[ &email, &token, &username]  ).for_each_row( handle_row_no_value )
+            ,@UserName)" , &[ &email, &token, &username]  ).for_each_row( handle_row_no_value )
     } );
+     lp.run(future).unwrap();
 }
 
 fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
