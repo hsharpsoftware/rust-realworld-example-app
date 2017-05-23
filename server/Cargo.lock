@@ -7,6 +7,7 @@ dependencies = [
  "clippy 0.0.134 (registry+https://github.com/rust-lang/crates.io-index)",
  "cookie 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures-state-stream 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper 0.10.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "iis 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "jwt 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",

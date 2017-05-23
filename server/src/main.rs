@@ -27,10 +27,15 @@ extern crate reroute;
 
 extern crate jwt;
 
+extern crate futures_state_stream;
+
 use futures::Future;
 use tokio_core::reactor::Core;
-use tiberius::SqlConnection;
+use tiberius::{SqlConnection, BoxableIo, TdsError};
 use tiberius::stmt::ResultStreamExt;
+use tiberius::query::{ExecFuture};
+
+use futures_state_stream::{StateStream};
 
 use bson::oid::ObjectId;
 
@@ -216,30 +221,40 @@ fn login(token: &str) -> Option<String> {
         None
     }
 }
+ 
+fn handle_row_no_value(row: tiberius::query::QueryRow) -> tiberius::TdsResult<()> {
+    Ok(())
+}
 
 fn registration_handler(mut req: Request, mut res: Response, _: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
     let registration : Registration = serde_json::from_str(&body).unwrap();     
 
-    let mut sql = Core::new().unwrap();
-    let insertUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
-        .and_then(|conn| conn.simple_query(
-            format!("INSERT INTO [dbo].[Users]
-                ([Email]
-                ,[Token]
-                ,[UserName])
-            VALUES
-                ('{1}'
-                ,'{2}'
-                ,'{3}') --{0}", &**databaseName, 
-                str::replace( &registration.user.email, "'", "''" ), 
-                str::replace( &crypto::pbkdf2::pbkdf2_simple(&registration.user.password, 10000).unwrap(), "'", "''" ), 
-                str::replace( &registration.user.username, "'", "''" )
-            )
-        ).for_each_row(|row| {Ok(())})
-    );
-    sql.run(insertUser).unwrap();     
+    let email : &str = &registration.user.email;
+    let token : &str = &crypto::pbkdf2::pbkdf2_simple(&registration.user.password, 10000).unwrap();
+    let username : &str = &registration.user.username;
+
+    let mut lp = Core::new().unwrap();
+    SqlConnection::connect(lp.handle(), connection_string.as_str())
+    .and_then( 
+        |conn| { 
+            ::futures::finished((conn.prepare(
+                "
+        INSERT INTO [dbo].[Users]
+            ([Email]
+            ,[Token]
+            ,[UserName])
+        VALUES
+            (@Email
+            ,@Token
+            ,@UserName)" 
+            ), conn))
+        } 
+    )
+    .and_then(|(stmt, conn)| {
+        conn.query( &stmt, &[ &email, &token, &username]  ).for_each_row( handle_row_no_value )
+    } );
 }
 
 fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
