@@ -246,7 +246,7 @@ fn registration_handler(mut req: Request, mut res: Response, _: Captures) {
         VALUES
             (@P1
             ,@P2
-            ,@P3)" , &[ &email, &token, &username]  ).for_each_row( handle_row_no_value )
+            ,@P3); SELECT SCOPE_IDENTITY()" , &[ &email, &token, &username]  ).for_each_row( handle_row_no_value )
     } );
      lp.run(future).unwrap();
 }
