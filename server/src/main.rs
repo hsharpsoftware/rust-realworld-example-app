@@ -251,13 +251,66 @@ fn registration_handler(mut req: Request, mut res: Response, _: Captures) {
      lp.run(future).unwrap();
 }
 
-fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
-    let token = req.headers.get::<Authorization<Bearer>>(); 
+fn update_user_handler(mut req: Request, res: Response, _: Captures) {
+    let mut body = String::new();
+    let _ = req.read_to_string(&mut body);    
+    let token =  req.headers.get::<Authorization<Bearer>>(); 
     match token {
         Some(token) => {
             let jwt = &token.0.token;
             let logged_in_user = login(&jwt);  
             let mut result : Option<User> = None; 
+
+            match logged_in_user {
+                Some(logged_in_user) => {
+                    println!("logged_in_user {}", &logged_in_user);
+
+                    let registration : Registration = serde_json::from_str(&body).unwrap();     
+                    let logged_in_user : &str = &logged_in_user;
+
+                    let mut sql = Core::new().unwrap();
+                    let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
+                        .and_then(|conn| { conn.query(                            
+                            "SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users] WHERE [Email] = @P1", &[&logged_in_user]
+                            )
+                            .for_each_row(|row| {
+                                let email : &str = row.get(0);
+                                let token : &str = row.get(1);
+                                let user_name : &str = row.get(2);
+                                let bio : Option<&str> = row.get(3);
+                                let image : Option<&str> = row.get(4);
+                                result = Some(User{ 
+                                    email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
+                                    image:image.map(|s| s.to_string()), username:user_name.to_string()
+                                });
+                                Ok(())
+                            })
+                        }
+                    );
+                    sql.run(getUser).unwrap(); 
+                    res.send(b"Hello World!").unwrap();
+                },
+                _ => {
+                }
+            }
+        }
+        _ => {
+
+        }
+    }
+}
+
+fn test_handler(mut req: Request, mut res: Response, _: Captures) {
+    res.send(b"Test works.").unwrap();
+}
+
+fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
+    let token = req.headers.get::<Authorization<Bearer>>(); 
+    let mut result : Option<User> = None; 
+    match token {
+        Some(token) => {
+            let jwt = &token.0.token;
+            let logged_in_user = login(&jwt);  
 
             match logged_in_user {
                 Some(logged_in_user) => {
@@ -283,7 +336,6 @@ fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
                         })
                     );
                     sql.run(getUser).unwrap(); 
-                    res.send(b"Hello World!").unwrap();
                 },
                 _ => {
                 }
@@ -293,11 +345,14 @@ fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
 
         }
     }
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }    
 }
 
-fn test_handler(mut req: Request, mut res: Response, _: Captures) {
-    res.send(b"Test works.").unwrap();
-}
 
 fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
     let mut body = String::new();
