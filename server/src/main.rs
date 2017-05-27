@@ -327,12 +327,11 @@ fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
                 Some(logged_in_user) => {
                     println!("logged_in_user {}", &logged_in_user);
                     let mut sql = Core::new().unwrap();
+                    let user : &str = &logged_in_user ;
                     let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
-                        .and_then(|conn| conn.simple_query(                            
-                            format!("SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users]
-                                WHERE [Email] = '{1}' --{0}", &**databaseName, 
-                                str::replace( &logged_in_user, "'", "''" )
-                            )
+                        .and_then(|conn| conn.query(                            
+                            "SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users]
+                                WHERE [Email] = @P1", &[&user]
                         ).for_each_row(|row| {
                             let email : &str = row.get(0);
                             let token : &str = row.get(1);
@@ -371,13 +370,10 @@ fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
     let login : Login = serde_json::from_str(&body).unwrap();    
 
     let mut sql = Core::new().unwrap();
+    let email : &str = &login.user.email;
     let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
-        .and_then(|conn| conn.simple_query(
-            format!("SELECT [Token] FROM [dbo].[Users]
-                WHERE [Email] = '{1}' --{0}", &**databaseName, 
-                str::replace( &login.user.email, "'", "''" )
-            )
-        ).for_each_row(|row| {
+        .and_then(|conn| conn.query( "SELECT [Token] FROM [dbo].[Users] WHERE [Email] = @P1", &[&email] )
+        .for_each_row(|row| {
             let storedHash : &str = row.get(0);
             let authenticated_user = crypto::pbkdf2::pbkdf2_check( &login.user.password, storedHash );
             *res.status_mut() = StatusCode::Unauthorized;
