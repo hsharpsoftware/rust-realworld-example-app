@@ -298,7 +298,7 @@ fn update_user_handler(mut req: Request, res: Response, _: Captures) {
                     let mut sql = Core::new().unwrap();
                     let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
                         .and_then(|conn| { conn.query(                            
-                            "UPDATE [dbo].[Users] SET [UserName]=@P2,[Bio]=@P3,[Image]=@P4, [Email] = @P5 WHERE [Id] = @P1; SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users] WHERE [Email] = @P1", 
+                            "UPDATE [dbo].[Users] SET [UserName]=@P2,[Bio]=@P3,[Image]=@P4, [Email] = @P5 WHERE [Id] = @P1; SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users] WHERE [Id] = @P1", 
                             &[&logged_in_user_id, &user_name, &bio, &image, &email]
                             )
                             .for_each_row(|row| {
@@ -356,7 +356,7 @@ fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
                     let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
                         .and_then(|conn| conn.query(                            
                             "SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users]
-                                WHERE [Email] = @P1", &[&logged_in_user]
+                                WHERE [Id] = @P1", &[&logged_in_user]
                         ).for_each_row(|row| {
                             let email : &str = row.get(0);
                             let token : &str = row.get(1);
