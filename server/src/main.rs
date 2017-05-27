@@ -158,6 +158,21 @@ struct DatabaseConfig {
     database_name: Option<String>,
 }
 
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
+struct UpdateUser {
+    user: UpdateUserDetail,
+}
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
+struct UpdateUserDetail {
+    email: String,
+    username : String,
+    bio : Option<String>,
+    image: Option<String>
+}
+
 static config_file_name : &'static str = r#"conduit.toml"#;
 
 lazy_static! {
@@ -212,11 +227,20 @@ fn new_token(user_id: &str, password: &str) -> Option<String> {
     token.signed(b"secret_key", Sha256::new()).ok()
 }
 
-fn login(token: &str) -> Option<String> {
+fn login(token: &str) -> Option<i32> {
     let token = Token::<Header, Registered>::parse(token).unwrap();
 
     if token.verify(b"secret_key", Sha256::new()) {
-        token.claims.sub
+        match token.claims.sub {
+            Some(token) => 
+                match token.parse::<i32>() {
+                    Ok(result) => Some(result),
+                    Err(_) => None
+                }
+            ,_ => None
+        }    
+        
+        
     } else {
         None
     }
@@ -259,21 +283,23 @@ fn update_user_handler(mut req: Request, res: Response, _: Captures) {
     match token {
         Some(token) => {
             let jwt = &token.0.token;
-            let logged_in_user = login(&jwt);  
+            let logged_in_user_id = login(&jwt);  
 
-            match logged_in_user {
-                Some(logged_in_user) => {
-                    println!("logged_in_user {}", &logged_in_user);
+            match logged_in_user_id {
+                Some(logged_in_user_id) => {
+                    println!("logged_in_user {}", &logged_in_user_id);
 
-                    let registration : Registration = serde_json::from_str(&body).unwrap();     
-                    let logged_in_user : &str = &logged_in_user;
-                    let user_name : &str = &logged_in_user;
+                    let update_user : UpdateUser = serde_json::from_str(&body).unwrap();     
+                    let user_name : &str = &update_user.user.username;
+                    let bio : &str = update_user.user.bio.as_ref().map(|x| &**x).unwrap_or("");
+                    let image : &str = update_user.user.image.as_ref().map(|x| &**x).unwrap_or("");
+                    let email : &str = &update_user.user.email;
 
                     let mut sql = Core::new().unwrap();
                     let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
                         .and_then(|conn| { conn.query(                            
-                            "UPDATE [dbo].[Users] SET [UserName]=@P2,[Bio]=@P3,[Image]=@P4 WHERE [Email] = @P1; SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users] WHERE [Email] = @P1", 
-                            &[&logged_in_user]
+                            "UPDATE [dbo].[Users] SET [UserName]=@P2,[Bio]=@P3,[Image]=@P4, [Email] = @P5 WHERE [Id] = @P1; SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users] WHERE [Email] = @P1", 
+                            &[&logged_in_user_id, &user_name, &bio, &image, &email]
                             )
                             .for_each_row(|row| {
                                 let email : &str = row.get(0);
@@ -327,11 +353,10 @@ fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
                 Some(logged_in_user) => {
                     println!("logged_in_user {}", &logged_in_user);
                     let mut sql = Core::new().unwrap();
-                    let user : &str = &logged_in_user ;
                     let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
                         .and_then(|conn| conn.query(                            
                             "SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users]
-                                WHERE [Email] = @P1", &[&user]
+                                WHERE [Email] = @P1", &[&logged_in_user]
                         ).for_each_row(|row| {
                             let email : &str = row.get(0);
                             let token : &str = row.get(1);
@@ -372,16 +397,17 @@ fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
     let mut sql = Core::new().unwrap();
     let email : &str = &login.user.email;
     let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
-        .and_then(|conn| conn.query( "SELECT [Token] FROM [dbo].[Users] WHERE [Email] = @P1", &[&email] )
+        .and_then(|conn| conn.query( "SELECT [Token], [Id] FROM [dbo].[Users] WHERE [Email] = @P1", &[&email] )
         .for_each_row(|row| {
             let storedHash : &str = row.get(0);
+            let user_id : i32 = row.get(1);
             let authenticated_user = crypto::pbkdf2::pbkdf2_check( &login.user.password, storedHash );
             *res.status_mut() = StatusCode::Unauthorized;
 
             match authenticated_user {
                 Ok(valid) => {
                     if valid {                     
-                        let token = new_token(&login.user.email, &login.user.password).unwrap();
+                        let token = new_token(user_id.to_string().as_ref(), &login.user.password).unwrap();
 
                         res.headers_mut().set(
                             Authorization(
@@ -441,6 +467,7 @@ fn main() {
     builder.get(r"/api/user", get_current_user_handler);   
     builder.get(r"/test", test_handler);   
     builder.get(r"/", hello_handler);   
+    builder.put(r"/api/user", update_user_handler);   
 
     let router = builder.finalize().unwrap(); 
 
