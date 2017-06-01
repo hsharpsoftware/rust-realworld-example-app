@@ -390,7 +390,7 @@ fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
 
 fn get_profile_handler(mut req: Request, mut res: Response, c: Captures) {
     let caps = c.unwrap();
-    let profile = &caps[1];
+    let profile = &caps[0];
     let mut result : Option<User> = None; 
 
     {
@@ -502,7 +502,7 @@ fn main() {
     builder.get(r"/api/user", get_current_user_handler);   
     builder.get(r"/test", test_handler);   
     builder.put(r"/api/user", update_user_handler);   
-    builder.put(r"/api/profiles/.*", get_profile_handler);   
+    builder.get(r"/api/profiles/.*", get_profile_handler);   
 
     let router = builder.finalize().unwrap(); 
 
