@@ -388,6 +388,40 @@ fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
     }    
 }
 
+fn get_profile_handler(mut req: Request, mut res: Response, c: Captures) {
+    let caps = c.unwrap();
+    let profile = &caps[1];
+    let mut result : Option<User> = None; 
+
+    {
+        let mut sql = Core::new().unwrap();
+        let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
+            .and_then(|conn| conn.query(                            
+                "SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users]
+                    WHERE [UserName] = @P1", &[&(profile.as_str())]
+            ).for_each_row(|row| {
+                let email : &str = row.get(0);
+                let token : &str = row.get(1);
+                let user_name : &str = row.get(2);
+                let bio : Option<&str> = row.get(3);
+                let image : Option<&str> = row.get(4);
+                result = Some(User{ 
+                    email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
+                    image:image.map(|s| s.to_string()), username:user_name.to_string()
+                });
+                Ok(())
+            })
+        );
+        sql.run(getUser).unwrap(); 
+    }
+
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }   
+}
 
 fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
     let mut body = String::new();
@@ -462,12 +496,13 @@ fn main() {
     let mut builder = RouterBuilder::new();
 
     // Use raw strings so you don't need to escape patterns.
+    builder.get(r"/", hello_handler);   
     builder.post(r"/api/users/login", authentication_handler);   
     builder.post(r"/api/users", registration_handler);   
     builder.get(r"/api/user", get_current_user_handler);   
     builder.get(r"/test", test_handler);   
-    builder.get(r"/", hello_handler);   
     builder.put(r"/api/user", update_user_handler);   
+    builder.put(r"/api/profiles/.*", get_profile_handler);   
 
     let router = builder.finalize().unwrap(); 
 
