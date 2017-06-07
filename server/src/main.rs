@@ -390,16 +390,15 @@ fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
 
 fn get_profile_handler(mut req: Request, mut res: Response, c: Captures) {
     let token = req.headers.get::<Authorization<Bearer>>(); 
-    let mut logged_id : Option<i32> = None; 
+    let logged_id : i32 =  
+        match token {
+            Some(token) => {
+                let jwt = &token.0.token;
+                login(&jwt).unwrap()
 
-    match token {
-        Some(token) => {
-            let jwt = &token.0.token;
-            logged_id = login(&jwt);  
-
-        }
-        _ => {}
-    }
+            }
+            _ => 0
+        };
 
     let caps = c.unwrap();
     let profile = &caps[0].replace("/api/profiles/", "");
@@ -410,16 +409,19 @@ fn get_profile_handler(mut req: Request, mut res: Response, c: Captures) {
         let mut sql = Core::new().unwrap();
         let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
             .and_then(|conn| conn.query(                            
-                "SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users]
-                    WHERE [UserName] = @P1", &[&(profile.as_str())]
+                "SELECT [Email],[Token],[UserName],[Bio],[Image] ,
+( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @P2 ) as Following
+FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
             ).for_each_row(|row| {
                 let email : &str = row.get(0);
                 let token : &str = row.get(1);
                 let user_name : &str = row.get(2);
                 let bio : Option<&str> = row.get(3);
                 let image : Option<&str> = row.get(4);
+                let f : i32 = row.get(5);
+                let following : bool = f == 1;
                 result = Some(Profile{ 
-                    following:false, bio:bio.map(|s| s.to_string()),
+                    following:following, bio:bio.map(|s| s.to_string()),
                     image:image.map(|s| s.to_string()), username:user_name.to_string()
                 });
                 Ok(())
