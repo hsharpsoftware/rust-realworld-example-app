@@ -22,3 +22,4 @@ server/.Cargo.toml.swp
 **/target/x86_64-pc-windows-gnu/
 .vscode/settings.json
 server/conduit.toml
+server/target/**

@@ -389,6 +389,18 @@ fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
 }
 
 fn get_profile_handler(mut req: Request, mut res: Response, c: Captures) {
+    let token = req.headers.get::<Authorization<Bearer>>(); 
+    let mut logged_id : Option<i32> = None; 
+
+    match token {
+        Some(token) => {
+            let jwt = &token.0.token;
+            logged_id = login(&jwt);  
+
+        }
+        _ => {}
+    }
+
     let caps = c.unwrap();
     let profile = &caps[0].replace("/api/profiles/", "");
     println!("profile: {}", profile);
