@@ -156,6 +156,7 @@ struct Config {
 struct DatabaseConfig {
     connection_string: Option<String>,
     database_name: Option<String>,
+    create_database_secret: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -183,6 +184,10 @@ lazy_static! {
     pub static ref databaseName : String = match get_database_config().database_name {
             Some(dbName) => dbName,
             None => panic!("database name not present in [database] section in {}", config_file_name),
+        };  
+    pub static ref createDatabaseSecret : String = match get_database_config().create_database_secret {
+            Some(dbName) => dbName,
+            None => panic!("create database secret not present in [database] section in {}", config_file_name),
         };  
 }
 
@@ -341,6 +346,23 @@ fn hello_handler(mut req: Request, mut res: Response, _: Captures) {
     res.send(b"Hello from Rust application in Hyper running in Azure IIS.").unwrap();
 }
 
+fn create_db_handler(mut req: Request, mut res: Response, _: Captures) {
+    let mut body = String::new();
+    let _ = req.read_to_string(&mut body);    
+    if body == createDatabaseSecret.as_str() {
+        let mut script = String::new();
+        let mut f = File::open("database.sql").expect("Unable to open file");
+        f.read_to_string(&mut script).expect("Unable to read string");
+
+        let mut lp = Core::new().unwrap();
+        let future = SqlConnection::connect(lp.handle(), connection_string.as_str())
+        .and_then(|conn| {
+            conn.query( script , &[ ]  ).for_each_row( handle_row_no_value )
+        } );
+        lp.run(future).unwrap();
+    }
+}
+
 fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
     let token = req.headers.get::<Authorization<Bearer>>(); 
     let mut result : Option<User> = None; 
@@ -477,31 +499,6 @@ fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
 }
 
 fn main() {    
-    let mut lp = Core::new().unwrap();
-    /*
-    let createDatabase = SqlConnection::connect(lp.handle(), connection_string.as_str() ).and_then(|conn| {
-            conn.simple_query(
-                format!("IF db_id('{0}') IS NULL CREATE DATABASE [{0}]", &**databaseName)
-            ).for_each_row(|row| {Ok(())})
-        }).and_then( |conn| {
-            conn.simple_query(
-                format!("if object_id('{0}..Users') is null CREATE TABLE [{0}].[dbo].[Users](
-        [Id] [int] IDENTITY(1,1) NOT NULL,
-        [Email] [nvarchar](50) NOT NULL,
-        [Token] [varchar](250) NOT NULL,
-        [UserName] [nvarchar](150) NOT NULL,
-        [Bio] [nvarchar](max) NULL,
-        [Image] [nvarchar](250) NULL,
-    CONSTRAINT [PK_Users] PRIMARY KEY CLUSTERED 
-    (
-        [Id] ASC
-    )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
-    ) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
-    ", &**databaseName )
-            ).for_each_row(|row| {Ok(())})
-        });
-        lp.run(createDatabase).unwrap(); 
-    */
     let port = iis::get_port();
 
     let listen_on = format!("0.0.0.0:{}", port);
@@ -512,6 +509,7 @@ fn main() {
 
     // Use raw strings so you don't need to escape patterns.
     builder.get(r"/", hello_handler);   
+    builder.post(r"/createdb", create_db_handler);   
     builder.post(r"/api/users/login", authentication_handler);   
     builder.post(r"/api/users", registration_handler);   
     builder.get(r"/api/user", get_current_user_handler);   

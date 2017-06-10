@@ -2,3 +2,4 @@
 connection_string = "server=tcp:XXX.database.windows.net,1433;uid=YYY@XXX.database.windows.net;password=ZZZ;encrypt=true;database=Conduit;"
 #connection_string = "server=tcp:127.0.0.1,1433;integratedSecurity=true;"
 database_name = "Conduit"
+create_database_secret = "SECRET123"
