@@ -360,6 +360,9 @@ fn create_db_handler(mut req: Request, mut res: Response, _: Captures) {
             conn.query( script , &[ ]  ).for_each_row( handle_row_no_value )
         } );
         lp.run(future).unwrap();
+        res.send(b"Database created.").unwrap();
+    } else {
+        *res.status_mut() = StatusCode::Unauthorized;        
     }
 }
 
