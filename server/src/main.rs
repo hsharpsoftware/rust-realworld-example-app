@@ -293,6 +293,18 @@ fn registration_test() {
     assert_eq!(res.status, hyper::Ok);
 }
 
+#[cfg(test)]
+#[test]
+fn login_test() {
+    let client = Client::new();
+
+    let res = client.post("http://localhost:6767/api/users/login")
+        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+}
+
 fn update_user_handler(mut req: Request, res: Response, _: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
