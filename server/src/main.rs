@@ -55,6 +55,7 @@ use reroute::{RouterBuilder, Captures};
 use hyper::header::{Authorization, Bearer};
 use hyper::{Get, Post};
 use hyper::status::StatusCode;
+use hyper::Client;
 
 use crypto::sha2::Sha256;
 
@@ -278,6 +279,18 @@ fn registration_handler(mut req: Request, mut res: Response, _: Captures) {
             ,@P3); SELECT SCOPE_IDENTITY()" , &[ &email, &token, &username]  ).for_each_row( handle_row_no_value )
     } );
      lp.run(future).unwrap();
+}
+
+#[cfg(test)]
+#[test]
+fn registration_test() {
+    let client = Client::new();
+
+    let res = client.post("http://localhost:6767/api/users")
+        .body(r#"{"user":{"username": "Jacob","email": "jake@jake.jake","password": "jakejake"}}"#)
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
 }
 
 fn update_user_handler(mut req: Request, res: Response, _: Captures) {
