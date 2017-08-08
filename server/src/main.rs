@@ -319,6 +319,18 @@ fn profile_unlogged_test() {
     assert_eq!(res.status, hyper::Ok);
 }
 
+#[cfg(test)]
+#[test]
+fn follow_test() {
+    let client = Client::new();
+
+    let res = client.post("http://localhost:6767/api/profiles/Jacob/follow")
+        .body("")
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+}
+
 fn update_user_handler(mut req: Request, res: Response, _: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
@@ -502,6 +514,59 @@ FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
     }   
 }
 
+fn follow_handler(mut req: Request, mut res: Response, c: Captures) {
+    let token = req.headers.get::<Authorization<Bearer>>(); 
+    let logged_id : i32 =  
+        match token {
+            Some(token) => {
+                let jwt = &token.0.token;
+                login(&jwt).unwrap()
+
+            }
+            _ => 0
+        };
+
+    let caps = c.unwrap();
+    let profile = &caps[0].replace("/api/profiles/", "").replace("/follow", "");
+    println!("profile: {}", profile);
+    let mut result : Option<Profile> = None; 
+
+    {
+        let mut sql = Core::new().unwrap();
+        let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
+            .and_then(|conn| conn.query(                            
+                "INSERT INTO [dbo].[Followings] ([FollowingId] ,[FollowerId])
+     VALUES (@P2,(SELECT TOP (1) [Id]  FROM [Users] where UserName = @P1));
+                SELECT [Email],[Token],[UserName],[Bio],[Image] ,
+( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @P2 ) as Following
+FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
+            ).for_each_row(|row| {
+                let email : &str = row.get(0);
+                let token : &str = row.get(1);
+                let user_name : &str = row.get(2);
+                let bio : Option<&str> = row.get(3);
+                let image : Option<&str> = row.get(4);
+                let f : i32 = row.get(5);
+                let following : bool = f == 1;
+                result = Some(Profile{ 
+                    following:following, bio:bio.map(|s| s.to_string()),
+                    image:image.map(|s| s.to_string()), username:user_name.to_string()
+                });
+                Ok(())
+            })
+        );
+        sql.run(getUser).unwrap(); 
+    }
+
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }   
+}
+
+
 fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
@@ -558,6 +623,7 @@ fn main() {
     builder.get(r"/test", test_handler);   
     builder.put(r"/api/user", update_user_handler);   
     builder.get(r"/api/profiles/.*", get_profile_handler);   
+    builder.post(r"/api/profiles/.*", follow_handler);   
 
     let router = builder.finalize().unwrap(); 
 
