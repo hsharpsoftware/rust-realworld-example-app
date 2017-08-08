@@ -324,7 +324,16 @@ fn profile_unlogged_test() {
 fn follow_test() {
     let client = Client::new();
 
+    let res = client.post("http://localhost:6767/api/users/login")
+        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
+    let jwt = &token.0.token;
+
     let res = client.post("http://localhost:6767/api/profiles/Jacob/follow")
+        .header(Authorization(Bearer {token: jwt.to_owned()}))
         .body("")
         .send()
         .unwrap();
