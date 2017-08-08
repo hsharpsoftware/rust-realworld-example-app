@@ -175,26 +175,26 @@ struct UpdateUserDetail {
     image: Option<String>
 }
 
-static config_file_name : &'static str = r#"conduit.toml"#;
+static CONFIG_FILE_NAME : &'static str = r#"conduit.toml"#;
 
 lazy_static! {
     pub static ref connection_string : String = match get_database_config().connection_string {
             Some(cnn) => cnn,
-            None => panic!("connection string not present in [database] section in {}", config_file_name),
+            None => panic!("connection string not present in [database] section in {}", CONFIG_FILE_NAME),
         };
     pub static ref databaseName : String = match get_database_config().database_name {
-            Some(dbName) => dbName,
-            None => panic!("database name not present in [database] section in {}", config_file_name),
+            Some(db_name) => db_name,
+            None => panic!("database name not present in [database] section in {}", CONFIG_FILE_NAME),
         };  
     pub static ref createDatabaseSecret : String = match get_database_config().create_database_secret {
-            Some(dbName) => dbName,
-            None => panic!("create database secret not present in [database] section in {}", config_file_name),
+            Some(db_name) => db_name,
+            None => panic!("create database secret not present in [database] section in {}", CONFIG_FILE_NAME),
         };  
 }
 
 fn get_database_config() -> DatabaseConfig {
     let mut path = PathBuf::from(env::current_dir().unwrap());
-    path.push(config_file_name);
+    path.push(CONFIG_FILE_NAME);
     let display = path.display();
 
     let mut file = match File::open(&path) {
@@ -213,15 +213,15 @@ fn get_database_config() -> DatabaseConfig {
     let toml_str : &str = &content;
     let config: Config = toml::from_str(toml_str).unwrap();
 
-    let mut database_config : DatabaseConfig = match config.database {
+    let database_config : DatabaseConfig = match config.database {
         Some(database_config) => database_config,
-        None => panic!("database not present in {}", config_file_name),
+        None => panic!("database not present in {}", CONFIG_FILE_NAME),
     };
 
     database_config
 }
 
-fn new_token(user_id: &str, password: &str) -> Option<String> {
+fn new_token(user_id: &str, _: &str) -> Option<String> {
     let header: jwt::Header = Default::default();
     let claims = jwt::Registered {
         iss: Some("mikkyang.com".into()),
@@ -252,11 +252,11 @@ fn login(token: &str) -> Option<i32> {
     }
 }
  
-fn handle_row_no_value(row: tiberius::query::QueryRow) -> tiberius::TdsResult<()> {
+fn handle_row_no_value(_: tiberius::query::QueryRow) -> tiberius::TdsResult<()> {
     Ok(())
 }
 
-fn registration_handler(mut req: Request, mut res: Response, _: Captures) {
+fn registration_handler(mut req: Request, res: Response, _: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
     let registration : Registration = serde_json::from_str(&body).unwrap();     
@@ -361,7 +361,7 @@ fn update_user_handler(mut req: Request, res: Response, _: Captures) {
                     let email : &str = &update_user.user.email;
 
                     let mut sql = Core::new().unwrap();
-                    let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
+                    let get_user = SqlConnection::connect(sql.handle(), connection_string.as_str() )
                         .and_then(|conn| { conn.query(                            
                             "UPDATE [dbo].[Users] SET [UserName]=@P2,[Bio]=@P3,[Image]=@P4, [Email] = @P5 WHERE [Id] = @P1; SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users] WHERE [Id] = @P1", 
                             &[&logged_in_user_id, &user_name, &bio, &image, &email]
@@ -380,7 +380,7 @@ fn update_user_handler(mut req: Request, res: Response, _: Captures) {
                             })
                         }
                     );
-                    sql.run(getUser).unwrap(); 
+                    sql.run(get_user).unwrap(); 
                 },
                 _ => {
                 }
@@ -398,11 +398,69 @@ fn update_user_handler(mut req: Request, res: Response, _: Captures) {
     }      
 }
 
-fn test_handler(mut req: Request, mut res: Response, _: Captures) {
+fn create_article_handler(mut req: Request, res: Response, _: Captures) {
+    let mut body = String::new();
+    let _ = req.read_to_string(&mut body);    
+    let token =  req.headers.get::<Authorization<Bearer>>(); 
+    let mut result : Option<User> = None; 
+    match token {
+        Some(token) => {
+            let jwt = &token.0.token;
+            let logged_in_user_id = login(&jwt);  
+
+            match logged_in_user_id {
+                Some(logged_in_user_id) => {
+                    println!("logged_in_user {}", &logged_in_user_id);
+
+                    let update_user : UpdateUser = serde_json::from_str(&body).unwrap();     
+                    let user_name : &str = &update_user.user.username;
+                    let bio : &str = update_user.user.bio.as_ref().map(|x| &**x).unwrap_or("");
+                    let image : &str = update_user.user.image.as_ref().map(|x| &**x).unwrap_or("");
+                    let email : &str = &update_user.user.email;
+
+                    let mut sql = Core::new().unwrap();
+                    let get_user = SqlConnection::connect(sql.handle(), connection_string.as_str() )
+                        .and_then(|conn| { conn.query(                            
+                            "UPDATE [dbo].[Users] SET [UserName]=@P2,[Bio]=@P3,[Image]=@P4, [Email] = @P5 WHERE [Id] = @P1; SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users] WHERE [Id] = @P1", 
+                            &[&logged_in_user_id, &user_name, &bio, &image, &email]
+                            )
+                            .for_each_row(|row| {
+                                let email : &str = row.get(0);
+                                let token : &str = row.get(1);
+                                let user_name : &str = row.get(2);
+                                let bio : Option<&str> = row.get(3);
+                                let image : Option<&str> = row.get(4);
+                                result = Some(User{ 
+                                    email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
+                                    image:image.map(|s| s.to_string()), username:user_name.to_string()
+                                });
+                                Ok(())
+                            })
+                        }
+                    );
+                    sql.run(get_user).unwrap(); 
+                },
+                _ => {
+                }
+            }
+        }
+        _ => {
+
+        }
+    }
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }      
+}
+
+fn test_handler(req: Request, res: Response, _: Captures) {
     res.send(b"Test works.").unwrap();
 }
 
-fn hello_handler(mut req: Request, mut res: Response, _: Captures) {
+fn hello_handler(req: Request, res: Response, _: Captures) {
     res.send(b"Hello from Rust application in Hyper running in Azure IIS.").unwrap();
 }
 
@@ -426,7 +484,7 @@ fn create_db_handler(mut req: Request, mut res: Response, _: Captures) {
     }
 }
 
-fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
+fn get_current_user_handler(req: Request, res: Response, _: Captures) {
     let token = req.headers.get::<Authorization<Bearer>>(); 
     let mut result : Option<User> = None; 
     match token {
@@ -438,7 +496,7 @@ fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
                 Some(logged_in_user) => {
                     println!("logged_in_user {}", &logged_in_user);
                     let mut sql = Core::new().unwrap();
-                    let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
+                    let get_user = SqlConnection::connect(sql.handle(), connection_string.as_str() )
                         .and_then(|conn| conn.query(                            
                             "SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users]
                                 WHERE [Id] = @P1", &[&logged_in_user]
@@ -455,7 +513,7 @@ fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
                             Ok(())
                         })
                     );
-                    sql.run(getUser).unwrap(); 
+                    sql.run(get_user).unwrap(); 
                 },
                 _ => {
                 }
@@ -473,7 +531,7 @@ fn get_current_user_handler(mut req: Request, res: Response, _: Captures) {
     }    
 }
 
-fn get_profile_handler(mut req: Request, mut res: Response, c: Captures) {
+fn get_profile_handler(req: Request, res: Response, c: Captures) {
     let token = req.headers.get::<Authorization<Bearer>>(); 
     let logged_id : i32 =  
         match token {
@@ -492,14 +550,14 @@ fn get_profile_handler(mut req: Request, mut res: Response, c: Captures) {
 
     {
         let mut sql = Core::new().unwrap();
-        let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
+        let get_user = SqlConnection::connect(sql.handle(), connection_string.as_str() )
             .and_then(|conn| conn.query(                            
                 "SELECT [Email],[Token],[UserName],[Bio],[Image] ,
 ( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @P2 ) as Following
 FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
             ).for_each_row(|row| {
-                let email : &str = row.get(0);
-                let token : &str = row.get(1);
+                let _ : &str = row.get(0);
+                let _ : &str = row.get(1);
                 let user_name : &str = row.get(2);
                 let bio : Option<&str> = row.get(3);
                 let image : Option<&str> = row.get(4);
@@ -512,7 +570,7 @@ FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
                 Ok(())
             })
         );
-        sql.run(getUser).unwrap(); 
+        sql.run(get_user).unwrap(); 
     }
 
     if result.is_some() {
@@ -523,7 +581,7 @@ FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
     }   
 }
 
-fn follow_handler(mut req: Request, mut res: Response, c: Captures) {
+fn follow_handler(req: Request, res: Response, c: Captures) {
     let token = req.headers.get::<Authorization<Bearer>>(); 
     let logged_id : i32 =  
         match token {
@@ -542,7 +600,7 @@ fn follow_handler(mut req: Request, mut res: Response, c: Captures) {
 
     {
         let mut sql = Core::new().unwrap();
-        let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
+        let get_user = SqlConnection::connect(sql.handle(), connection_string.as_str() )
             .and_then(|conn| conn.query(                            
                 "INSERT INTO [dbo].[Followings] ([FollowingId] ,[FollowerId])
      VALUES (@P2,(SELECT TOP (1) [Id]  FROM [Users] where UserName = @P1));
@@ -550,8 +608,8 @@ fn follow_handler(mut req: Request, mut res: Response, c: Captures) {
 ( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @P2 ) as Following
 FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
             ).for_each_row(|row| {
-                let email : &str = row.get(0);
-                let token : &str = row.get(1);
+                let _ : &str = row.get(0);
+                let _ : &str = row.get(1);
                 let user_name : &str = row.get(2);
                 let bio : Option<&str> = row.get(3);
                 let image : Option<&str> = row.get(4);
@@ -564,7 +622,7 @@ FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
                 Ok(())
             })
         );
-        sql.run(getUser).unwrap(); 
+        sql.run(get_user).unwrap(); 
     }
 
     if result.is_some() {
@@ -583,12 +641,12 @@ fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
 
     let mut sql = Core::new().unwrap();
     let email : &str = &login.user.email;
-    let getUser = SqlConnection::connect(sql.handle(), connection_string.as_str() )
+    let get_user = SqlConnection::connect(sql.handle(), connection_string.as_str() )
         .and_then(|conn| conn.query( "SELECT [Token], [Id] FROM [dbo].[Users] WHERE [Email] = @P1", &[&email] )
         .for_each_row(|row| {
-            let storedHash : &str = row.get(0);
+            let stored_hash : &str = row.get(0);
             let user_id : i32 = row.get(1);
-            let authenticated_user = crypto::pbkdf2::pbkdf2_check( &login.user.password, storedHash );
+            let authenticated_user = crypto::pbkdf2::pbkdf2_check( &login.user.password, stored_hash);
             *res.status_mut() = StatusCode::Unauthorized;
 
             match authenticated_user {
@@ -611,7 +669,7 @@ fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
             Ok(())
         })
     );
-    sql.run(getUser).unwrap(); 
+    sql.run(get_user).unwrap(); 
 }
 
 fn main() {    
@@ -633,6 +691,7 @@ fn main() {
     builder.put(r"/api/user", update_user_handler);   
     builder.get(r"/api/profiles/.*", get_profile_handler);   
     builder.post(r"/api/profiles/.*", follow_handler);   
+    builder.post(r"/api/articles", create_article_handler);   
 
     let router = builder.finalize().unwrap(); 
 
