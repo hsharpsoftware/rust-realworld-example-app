@@ -340,6 +340,7 @@ fn profile_unlogged_test() {
 }
 
 #[cfg(test)]
+#[test]
 fn follow_test() {
     let client = Client::new();
 
@@ -763,8 +764,8 @@ fn follow_handler(req: Request, res: Response, c: Captures) {
         let get_user = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
                 "INSERT INTO [dbo].[Followings] ([FollowingId] ,[FollowerId])
-     VALUES (@P2,(SELECT TOP (1) [Id]  FROM [Users] where UserName = @P1));
-                SELECT [Email],[Token],[UserName],[Bio],[Image] ,
+     SELECT @P2,(SELECT TOP (1) [Id]  FROM [Users] where UserName = @P1) EXCEPT SELECT [FollowingId] ,[FollowerId] from Followings;
+                SELECT TOP 1 [Email],[Token],[UserName],[Bio],[Image] ,
 ( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @P2 ) as Following
 FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
             ).for_each_row(|row| {
