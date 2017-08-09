@@ -29,6 +29,8 @@ extern crate jwt;
 
 extern crate futures_state_stream;
 
+extern crate slug;
+
 use futures::Future;
 use tokio_core::reactor::Core;
 use tiberius::{SqlConnection, BoxableIo, TdsError};
@@ -64,6 +66,8 @@ use jwt::{
     Registered,
     Token,
 };
+
+use slug::slugify;
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
@@ -164,6 +168,22 @@ struct DatabaseConfig {
 #[derive(Debug)]
 struct UpdateUser {
     user: UpdateUserDetail,
+}
+
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
+struct CreateArticle {
+    article: CreateArticleDetail
+}
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
+struct CreateArticleDetail {
+    title: String,
+    description: String,
+    body: String,
+    tagList: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -412,17 +432,20 @@ fn create_article_handler(mut req: Request, res: Response, _: Captures) {
                 Some(logged_in_user_id) => {
                     println!("logged_in_user {}", &logged_in_user_id);
 
-                    let update_user : UpdateUser = serde_json::from_str(&body).unwrap();     
-                    let user_name : &str = &update_user.user.username;
-                    let bio : &str = update_user.user.bio.as_ref().map(|x| &**x).unwrap_or("");
-                    let image : &str = update_user.user.image.as_ref().map(|x| &**x).unwrap_or("");
-                    let email : &str = &update_user.user.email;
-
+                    let create_article : CreateArticle = serde_json::from_str(&body).unwrap();     
+                    let title : &str = &create_article.article.title;
+                    let description : &str = &create_article.article.description;
+                    let body : &str = &create_article.article.body;
+                    let tagList : Vec<String> = create_article.article.tagList.unwrap_or(Vec::new());
+                    let slug = slugify(title);
+                    
                     let mut sql = Core::new().unwrap();
-                    let get_user = SqlConnection::connect(sql.handle(), connection_string.as_str() )
+                    let create_article_cmd = SqlConnection::connect(sql.handle(), connection_string.as_str() )
                         .and_then(|conn| { conn.query(                            
-                            "UPDATE [dbo].[Users] SET [UserName]=@P2,[Bio]=@P3,[Image]=@P4, [Email] = @P5 WHERE [Id] = @P1; SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users] WHERE [Id] = @P1", 
-                            &[&logged_in_user_id, &user_name, &bio, &image, &email]
+                            "INSERT INTO Articles (Title, [Description], Body, Created, Author) Values (@P1, @P2, @P3, getdate(), @P4);
+                            SELECT 
+                            ", 
+                            &[&title, &description, &body, &logged_in_user_id,]
                             )
                             .for_each_row(|row| {
                                 let email : &str = row.get(0);
@@ -430,15 +453,15 @@ fn create_article_handler(mut req: Request, res: Response, _: Captures) {
                                 let user_name : &str = row.get(2);
                                 let bio : Option<&str> = row.get(3);
                                 let image : Option<&str> = row.get(4);
-                                result = Some(User{ 
+                                /*result = Some(Article{ 
                                     email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
                                     image:image.map(|s| s.to_string()), username:user_name.to_string()
-                                });
+                                });*/
                                 Ok(())
                             })
                         }
                     );
-                    sql.run(get_user).unwrap(); 
+                    sql.run(create_article_cmd).unwrap(); 
                 },
                 _ => {
                 }

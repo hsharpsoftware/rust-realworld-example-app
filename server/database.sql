@@ -51,4 +51,28 @@ REFERENCES [dbo].[Users] ([Id])
 GO
 ALTER TABLE [dbo].[Followings] CHECK CONSTRAINT [FK_Followings_Users1]
 GO
+
+CREATE TABLE [dbo].[Articles](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[Slug] [nvarchar](250) NULL,
+	[Title] [nvarchar](250) NOT NULL,
+	[Description] [nvarchar](250) NOT NULL,
+	[Body] [ntext] NOT NULL,
+	[Created] [datetime] NOT NULL,
+	[Updated] [datetime] NULL,
+	[Author] [int] NOT NULL,
+ CONSTRAINT [PK_Articles] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[Articles]  WITH CHECK ADD  CONSTRAINT [FK_Articles_Users] FOREIGN KEY([Author])
+REFERENCES [dbo].[Users] ([Id])
+GO
+
+ALTER TABLE [dbo].[Articles] CHECK CONSTRAINT [FK_Articles_Users]
+GO
+
 SELECT 1
