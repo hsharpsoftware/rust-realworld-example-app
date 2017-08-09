@@ -359,6 +359,30 @@ fn follow_test() {
     assert_eq!(res.status, hyper::Ok);
 }
 
+
+#[cfg(test)]
+#[test]
+fn profile_logged_test() {
+    let client = Client::new();
+
+    let res = client.post("http://localhost:6767/api/users/login")
+        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
+    let jwt = &token.0.token;
+
+    let mut res = client.get("http://localhost:6767/api/profiles/Jacob")
+        .header(Authorization(Bearer {token: jwt.to_owned()}))
+        .send()
+        .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+    assert_eq!( buffer, r#"{"username":"Jacob","bio":null,"image":null,"following":false}"# );
+    assert_eq!(res.status, hyper::Ok);
+}
+
 #[cfg(test)]
 #[test]
 fn unfollow_test() {
