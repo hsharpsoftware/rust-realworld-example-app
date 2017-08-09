@@ -88,8 +88,8 @@ struct Article {
     description : String,
     body : String,
     tagList: Vec<String>,
-    createdAt: DateTime<UTC>,
-    updatedAt: DateTime<UTC>,
+    createdAt: NaiveDateTime,
+    updatedAt: NaiveDateTime,
     favorited : bool,
     favoritesCount : i32,
     author : Profile
@@ -422,7 +422,7 @@ fn create_article_handler(mut req: Request, res: Response, _: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
     let token =  req.headers.get::<Authorization<Bearer>>(); 
-    let mut result : Option<User> = None; 
+    let mut result : Option<Article> = None; 
     match token {
         Some(token) => {
             let jwt = &token.0.token;
@@ -454,8 +454,8 @@ fn create_article_handler(mut req: Request, res: Response, _: Captures) {
                                 let title : &str = row.get(1);
                                 let description : &str = row.get(2);
                                 let body : &str = row.get(3);
-                                let created : tiberius::ty::DateTime = row.get(4);
-                                let updated : tiberius::ty::DateTime = row.get(5);
+                                let created : chrono::NaiveDateTime = row.get(4);
+                                let updated : chrono::NaiveDateTime = row.get(5);
                                 let user_name : &str = row.get(6);
                                 let bio : Option<&str> = row.get(7);
                                 let image : Option<&str> = row.get(8);
@@ -465,10 +465,18 @@ fn create_article_handler(mut req: Request, res: Response, _: Captures) {
                                 let profile = Profile{ username: user_name.to_string(), bio:bio.map(|s| s.to_string()),
                                     image:image.map(|s| s.to_string()), following : following };
                                 
-                                /*result = Some(Article{ 
-                                    email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
-                                    image:image.map(|s| s.to_string()), username:user_name.to_string()
-                                });*/
+                                result = Some(Article{ 
+                                    slug: slug.to_string(),
+                                    title: title.to_string(),
+                                    description : description.to_string(),
+                                    body : body.to_string(),
+                                    tagList: Vec::new(), //TODO: change
+                                    createdAt: created,
+                                    updatedAt: updated,
+                                    favorited : false,
+                                    favoritesCount : 0,
+                                    author : profile                                    
+                                });
                                 Ok(())
                             })
                         }
