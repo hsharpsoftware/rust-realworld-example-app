@@ -437,22 +437,34 @@ fn create_article_handler(mut req: Request, res: Response, _: Captures) {
                     let description : &str = &create_article.article.description;
                     let body : &str = &create_article.article.body;
                     let tagList : Vec<String> = create_article.article.tagList.unwrap_or(Vec::new());
-                    let slug = slugify(title);
+                    let slug : &str = &slugify(title);
                     
                     let mut sql = Core::new().unwrap();
                     let create_article_cmd = SqlConnection::connect(sql.handle(), connection_string.as_str() )
                         .and_then(|conn| { conn.query(                            
-                            "INSERT INTO Articles (Title, [Description], Body, Created, Author) Values (@P1, @P2, @P3, getdate(), @P4);
-                            SELECT 
+                            "INSERT INTO Articles (Title, [Description], Body, Created, Author, Slug) Values (@P1, @P2, @P3, getdate(), @P4, @P5);
+                            SELECT Slug, Title, [Description], Body, Created, Updated, Users.UserName, Users.Bio, Users.[Image], 
+                            (SELECT COUNT(*) FROM Followings WHERE FollowerId=@P4 AND Author=FollowingId) as [Following]
+                            FROM Articles INNER JOIN Users on Author=Users.Id WHERE Articles.Id  = SCOPE_IDENTITY()
                             ", 
-                            &[&title, &description, &body, &logged_in_user_id,]
+                            &[&title, &description, &body, &logged_in_user_id, &slug,]
                             )
                             .for_each_row(|row| {
-                                let email : &str = row.get(0);
-                                let token : &str = row.get(1);
-                                let user_name : &str = row.get(2);
-                                let bio : Option<&str> = row.get(3);
-                                let image : Option<&str> = row.get(4);
+                                let slug : &str = row.get(0);
+                                let title : &str = row.get(1);
+                                let description : &str = row.get(2);
+                                let body : &str = row.get(3);
+                                let created : tiberius::ty::DateTime = row.get(4);
+                                let updated : tiberius::ty::DateTime = row.get(5);
+                                let user_name : &str = row.get(6);
+                                let bio : Option<&str> = row.get(7);
+                                let image : Option<&str> = row.get(8);
+                                let f : i32 = row.get(9);
+                                let following : bool = f == 1;
+
+                                let profile = Profile{ username: user_name.to_string(), bio:bio.map(|s| s.to_string()),
+                                    image:image.map(|s| s.to_string()), following : following };
+                                
                                 /*result = Some(Article{ 
                                     email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
                                     image:image.map(|s| s.to_string()), username:user_name.to_string()
