@@ -687,7 +687,7 @@ fn unfollow_handler(req: Request, res: Response, c: Captures) {
 
     {
         let mut sql = Core::new().unwrap();
-        let delete_user = SqlConnection::connect(sql.handle(), connection_string.as_str() )
+        let delete_user = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
                 "DELETE from [dbo].[Followings] WHERE [FollowingId] = @P1", &[&logged_id]
             )
