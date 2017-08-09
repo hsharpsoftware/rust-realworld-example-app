@@ -57,7 +57,7 @@ CREATE TABLE [dbo].[Articles](
 	[Slug] [nvarchar](250) NULL,
 	[Title] [nvarchar](250) NOT NULL,
 	[Description] [nvarchar](250) NOT NULL,
-	[Body] [ntext] NOT NULL,
+	[Body] [nvarchar](max) NOT NULL,
 	[Created] [datetime] NOT NULL,
 	[Updated] [datetime] NULL,
 	[Author] [int] NOT NULL,

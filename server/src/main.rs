@@ -89,7 +89,7 @@ struct Article {
     body : String,
     tagList: Vec<String>,
     createdAt: NaiveDateTime,
-    updatedAt: NaiveDateTime,
+    updatedAt: Option<NaiveDateTime>,
     favorited : bool,
     favoritesCount : i32,
     author : Profile
@@ -465,7 +465,7 @@ fn create_article_handler(mut req: Request, res: Response, _: Captures) {
                     let create_article_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
                         .and_then(|conn| { conn.query(                            
                             "INSERT INTO Articles (Title, [Description], Body, Created, Author, Slug) Values (@P1, @P2, @P3, getdate(), @P4, @P5);
-                            SELECT Slug, Title, [Description], Body, Created, Updated, Users.UserName, Users.Bio, Users.[Image], 
+                            SELECT Slug, Title, [Description], Body, Created, Created, Users.UserName, Users.Bio, Users.[Image], 
                             (SELECT COUNT(*) FROM Followings WHERE FollowerId=@P4 AND Author=FollowingId) as [Following]
                             FROM Articles INNER JOIN Users on Author=Users.Id WHERE Articles.Id  = SCOPE_IDENTITY()
                             ", 
@@ -477,7 +477,7 @@ fn create_article_handler(mut req: Request, res: Response, _: Captures) {
                                 let description : &str = row.get(2);
                                 let body : &str = row.get(3);
                                 let created : chrono::NaiveDateTime = row.get(4);
-                                let updated : chrono::NaiveDateTime = row.get(5);
+                                let updated : Option<chrono::NaiveDateTime> = row.get(5);
                                 let user_name : &str = row.get(6);
                                 let bio : Option<&str> = row.get(7);
                                 let image : Option<&str> = row.get(8);
