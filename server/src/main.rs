@@ -360,6 +360,53 @@ fn follow_test() {
     assert_eq!(res.status, hyper::Ok);
 }
 
+
+#[cfg(test)]
+#[test]
+fn profile_logged_test() {
+    let client = Client::new();
+
+    let res = client.post("http://localhost:6767/api/users/login")
+        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
+    let jwt = &token.0.token;
+
+    let mut res = client.get("http://localhost:6767/api/profiles/Jacob")
+        .header(Authorization(Bearer {token: jwt.to_owned()}))
+        .send()
+        .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+    //assert_eq!( buffer, r#"{"username":"Jacob","bio":null,"image":null,"following":false}"# );
+    assert_eq!(res.status, hyper::Ok);
+}
+
+#[cfg(test)]
+#[test]
+fn unfollow_test() {
+    let client = Client::new();
+
+    let res = client.post("http://localhost:6767/api/users/login")
+        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
+    let jwt = &token.0.token;
+
+    follow_test();
+
+    let res = client.delete("http://localhost:6767/api/profiles/Jacob/follow")
+        .header(Authorization(Bearer {token: jwt.to_owned()}))
+        .body("")
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+}
+
 #[cfg(test)]
 #[test]
 fn create_article_test() {
@@ -458,18 +505,22 @@ fn create_article_handler(mut req: Request, res: Response, _: Captures) {
                     let title : &str = &create_article.article.title;
                     let description : &str = &create_article.article.description;
                     let body : &str = &create_article.article.body;
-                    let tagList : Vec<String> = create_article.article.tagList.unwrap_or(Vec::new());
+                    let tag_list : Vec<String> = create_article.article.tagList.unwrap_or(Vec::new());
                     let slug : &str = &slugify(title);
+                    let tags : &str = &tag_list.join(",");
                     
                     let mut sql = Core::new().unwrap();
                     let create_article_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
                         .and_then(|conn| { conn.query(                            
-                            "INSERT INTO Articles (Title, [Description], Body, Created, Author, Slug) Values (@P1, @P2, @P3, getdate(), @P4, @P5);
+                            "insert into Tags (Tag) SELECT EmployeeID = Item FROM dbo.SplitNVarchars(@P6, ',')  Except select Tag from Tags;                            
+                            INSERT INTO Articles (Title, [Description], Body, Created, Author, Slug) Values (@P1, @P2, @P3, getdate(), @P4, @P5);
+                            DECLARE @id int = SCOPE_IDENTITY();
+                            insert into [ArticleTags] (ArticleId, TagId) SELECT @id, Id From Tags WHERE Tag IN (SELECT EmployeeID = Item FROM dbo.SplitNVarchars(@P6, ','));
                             SELECT Slug, Title, [Description], Body, Created, Updated, Users.UserName, Users.Bio, Users.[Image], 
                             (SELECT COUNT(*) FROM Followings WHERE FollowerId=@P4 AND Author=FollowingId) as [Following]
-                            FROM Articles INNER JOIN Users on Author=Users.Id WHERE Articles.Id  = SCOPE_IDENTITY()
+                            FROM Articles INNER JOIN Users on Author=Users.Id WHERE Articles.Id  = @id
                             ", 
-                            &[&title, &description, &body, &logged_in_user_id, &slug,]
+                            &[&title, &description, &body, &logged_in_user_id, &slug,&tags,]
                             )
                             .for_each_row(|row| {
                                 let slug : &str = row.get(0);
@@ -521,11 +572,11 @@ fn create_article_handler(mut req: Request, res: Response, _: Captures) {
     }      
 }
 
-fn test_handler(req: Request, res: Response, _: Captures) {
+fn test_handler(_: Request, res: Response, _: Captures) {
     res.send(b"Test works.").unwrap();
 }
 
-fn hello_handler(req: Request, res: Response, _: Captures) {
+fn hello_handler(_: Request, res: Response, _: Captures) {
     res.send(b"Hello from Rust application in Hyper running in Azure IIS.").unwrap();
 }
 
@@ -646,6 +697,55 @@ FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
     }   
 }
 
+fn unfollow_handler(req: Request, res: Response, c: Captures) {
+    let token = req.headers.get::<Authorization<Bearer>>(); 
+    let logged_id : i32 =  
+        match token {
+            Some(token) => {
+                let jwt = &token.0.token;
+                login(&jwt).unwrap()
+
+            }
+            _ => 0
+        };
+
+    let caps = c.unwrap();
+    let profile = &caps[0].replace("/api/profiles/", "").replace("/follow", "");
+    println!("profile: {}", profile);
+    let mut result : Option<Profile> = None; 
+
+    {
+        let mut sql = Core::new().unwrap();
+        let delete_user = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+            .and_then(|conn| conn.query(                            
+                "DELETE from [dbo].[Followings] WHERE [FollowingId] = @P1", &[&logged_id]
+            )
+            .for_each_row(|row| {
+                let _ : &str = row.get(0);
+                let _ : &str = row.get(1);
+                let user_name : &str = row.get(2);
+                let bio : Option<&str> = row.get(3);
+                let image : Option<&str> = row.get(4);
+                let f : i32 = row.get(5);
+                let following : bool = f == 1;
+                result = Some(Profile{ 
+                    following:following, bio:bio.map(|s| s.to_string()),
+                    image:image.map(|s| s.to_string()), username:user_name.to_string()
+                });
+                Ok(())
+            })
+        );
+        sql.run(delete_user).unwrap(); 
+    }
+
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }   
+}
+
 fn follow_handler(req: Request, res: Response, c: Captures) {
     let token = req.headers.get::<Authorization<Bearer>>(); 
     let logged_id : i32 =  
@@ -668,8 +768,8 @@ fn follow_handler(req: Request, res: Response, c: Captures) {
         let get_user = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
                 "INSERT INTO [dbo].[Followings] ([FollowingId] ,[FollowerId])
-     VALUES (@P2,(SELECT TOP (1) [Id]  FROM [Users] where UserName = @P1));
-                SELECT [Email],[Token],[UserName],[Bio],[Image] ,
+     SELECT @P2,(SELECT TOP (1) [Id]  FROM [Users] where UserName = @P1) EXCEPT SELECT [FollowingId] ,[FollowerId] from Followings;
+                SELECT TOP 1 [Email],[Token],[UserName],[Bio],[Image] ,
 ( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @P2 ) as Following
 FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
             ).for_each_row(|row| {
@@ -707,7 +807,7 @@ fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
     let mut sql = Core::new().unwrap();
     let email : &str = &login.user.email;
     let get_user = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-        .and_then(|conn| conn.query( "SELECT [Token], [Id] FROM [dbo].[Users] WHERE [Email] = @P1", &[&email] )
+        .and_then(|conn| conn.query( "SELECT TOP 1 [Token], [Id] FROM [dbo].[Users] WHERE [Email] = @P1", &[&email] )
         .for_each_row(|row| {
             let stored_hash : &str = row.get(0);
             let user_id : i32 = row.get(1);
@@ -756,6 +856,7 @@ fn main() {
     builder.put(r"/api/user", update_user_handler);   
     builder.get(r"/api/profiles/.*", get_profile_handler);   
     builder.post(r"/api/profiles/.*", follow_handler);   
+    builder.delete(r"/api/profiles/.*", unfollow_handler);  
     builder.post(r"/api/articles", create_article_handler);   
 
     let router = builder.finalize().unwrap(); 

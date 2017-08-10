@@ -6,6 +6,21 @@ CREATE DATABASE Conduit
 GO
 USE [Conduit]
 GO
+CREATE FUNCTION dbo.SplitNVarchars
+(
+   @List      VARCHAR(MAX),
+   @Delimiter VARCHAR(255)
+)
+RETURNS TABLE
+AS
+  RETURN ( SELECT Item = CONVERT(NVarchar(max), Item) FROM
+      ( SELECT Item = x.i.value('(./text())[1]', 'varchar(max)')
+        FROM ( SELECT [XML] = CONVERT(XML, '<i>'
+        + REPLACE(@List, @Delimiter, '</i><i>') + '</i>').query('.')
+          ) AS a CROSS APPLY [XML].nodes('i') AS x(i) ) AS y
+      WHERE Item IS NOT NULL
+  );
+GO
 /****** Object:  Table [dbo].[Followings]    Script Date: 6/8/2017 5:52:08 PM ******/
 SET ANSI_NULLS ON
 GO
@@ -73,6 +88,12 @@ REFERENCES [dbo].[Users] ([Id])
 GO
 
 ALTER TABLE [dbo].[Articles] CHECK CONSTRAINT [FK_Articles_Users]
+GO
+
+CREATE TABLE [dbo].[ArticleTags](
+	[ArticleId] [int] NOT NULL,
+	[TagId] [int] NOT NULL
+)
 GO
 
 SELECT 1
