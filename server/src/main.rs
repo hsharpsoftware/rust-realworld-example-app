@@ -711,14 +711,16 @@ fn unfollow_handler(req: Request, res: Response, c: Captures) {
 
     let caps = c.unwrap();
     let profile = &caps[0].replace("/api/profiles/", "").replace("/follow", "");
-    println!("profile: {}", profile);
     let mut result : Option<Profile> = None; 
 
     {
         let mut sql = Core::new().unwrap();
         let delete_user = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
-                "DELETE from [dbo].[Followings] WHERE [FollowingId] = @P1", &[&logged_id]
+                "DELETE TOP (1) from [dbo].[Followings] WHERE [FollowerId] = @P2;
+                SELECT TOP (1) [Email],[Token],[UserName],[Bio],[Image] ,
+( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @P2 ) as Following
+FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
             )
             .for_each_row(|row| {
                 let _ : &str = row.get(0);
