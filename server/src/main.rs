@@ -568,11 +568,11 @@ fn create_article_handler(mut req: Request, res: Response, _: Captures) {
     }      
 }
 
-fn test_handler(req: Request, res: Response, _: Captures) {
+fn test_handler(_: Request, res: Response, _: Captures) {
     res.send(b"Test works.").unwrap();
 }
 
-fn hello_handler(req: Request, res: Response, _: Captures) {
+fn hello_handler(_: Request, res: Response, _: Captures) {
     res.send(b"Hello from Rust application in Hyper running in Azure IIS.").unwrap();
 }
 
