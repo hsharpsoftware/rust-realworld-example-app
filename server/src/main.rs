@@ -805,7 +805,7 @@ fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
     let mut sql = Core::new().unwrap();
     let email : &str = &login.user.email;
     let get_user = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-        .and_then(|conn| conn.query( "SELECT [Token], [Id] FROM [dbo].[Users] WHERE [Email] = @P1", &[&email] )
+        .and_then(|conn| conn.query( "SELECT TOP 1 [Token], [Id] FROM [dbo].[Users] WHERE [Email] = @P1", &[&email] )
         .for_each_row(|row| {
             let stored_hash : &str = row.get(0);
             let user_id : i32 = row.get(1);
