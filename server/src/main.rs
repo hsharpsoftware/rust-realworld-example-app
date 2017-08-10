@@ -505,18 +505,20 @@ fn create_article_handler(mut req: Request, res: Response, _: Captures) {
                     let title : &str = &create_article.article.title;
                     let description : &str = &create_article.article.description;
                     let body : &str = &create_article.article.body;
-                    let tagList : Vec<String> = create_article.article.tagList.unwrap_or(Vec::new());
+                    let tag_list : Vec<String> = create_article.article.tagList.unwrap_or(Vec::new());
                     let slug : &str = &slugify(title);
+                    let tags : &str = &tag_list.join(",");
                     
                     let mut sql = Core::new().unwrap();
                     let create_article_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
                         .and_then(|conn| { conn.query(                            
-                            "INSERT INTO Articles (Title, [Description], Body, Created, Author, Slug) Values (@P1, @P2, @P3, getdate(), @P4, @P5);
+                            "insert into Tags (Tag) SELECT EmployeeID = Item FROM dbo.SplitNVarchars(@P6)  Except select Tag from Tags;
+                            INSERT INTO Articles (Title, [Description], Body, Created, Author, Slug) Values (@P1, @P2, @P3, getdate(), @P4, @P5);
                             SELECT Slug, Title, [Description], Body, Created, Updated, Users.UserName, Users.Bio, Users.[Image], 
                             (SELECT COUNT(*) FROM Followings WHERE FollowerId=@P4 AND Author=FollowingId) as [Following]
                             FROM Articles INNER JOIN Users on Author=Users.Id WHERE Articles.Id  = SCOPE_IDENTITY()
                             ", 
-                            &[&title, &description, &body, &logged_in_user_id, &slug,]
+                            &[&title, &description, &body, &logged_in_user_id, &slug,&tags,]
                             )
                             .for_each_row(|row| {
                                 let slug : &str = row.get(0);
