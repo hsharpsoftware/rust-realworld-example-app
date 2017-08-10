@@ -90,4 +90,10 @@ GO
 ALTER TABLE [dbo].[Articles] CHECK CONSTRAINT [FK_Articles_Users]
 GO
 
+CREATE TABLE [dbo].[ArticleTags](
+	[ArticleId] [int] NOT NULL,
+	[TagId] [int] NOT NULL
+)
+GO
+
 SELECT 1
