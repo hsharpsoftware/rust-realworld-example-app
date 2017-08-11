@@ -185,6 +185,12 @@ struct UpdateUserDetail {
     image: Option<String>
 }
 
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
+struct GetTagsResult {
+    tags: Vec<String>,
+}
+
 static CONFIG_FILE_NAME : &'static str = r#"conduit.toml"#;
 
 lazy_static! {
@@ -832,6 +838,33 @@ fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
     sql.run(get_user_cmd).unwrap(); 
 }
 
+fn get_tags_handler(_: Request, res: Response, c: Captures) {
+    let mut result : Option<GetTagsResult> = None; 
+
+    {
+        let mut sql = Core::new().unwrap();
+        let get_tags_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+            .and_then(|conn| conn.query(                            
+                "SELECT STRING_AGG(Tag, ', ') FROM [dbo].[Tags]", &[]
+            ).for_each_row(|row| {
+                let all_tags : &str = row.get(0);
+                result = Some(GetTagsResult{ 
+                    tags: all_tags.split(",").map(|q| q.to_string()).collect()
+                });
+                Ok(())
+            })
+        );
+        sql.run(get_tags_cmd).unwrap(); 
+    }
+
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }   
+}
+
 fn main() {    
     let port = iis::get_port();
 
@@ -853,6 +886,8 @@ fn main() {
     builder.post(r"/api/profiles/.*", follow_handler);   
     builder.delete(r"/api/profiles/.*", unfollow_handler);  
     builder.post(r"/api/articles", create_article_handler);   
+    builder.get(r"/api/profiles/.*", get_profile_handler);   
+    builder.get(r"/api/tags", get_tags_handler);   
 
     let router = builder.finalize().unwrap(); 
 
