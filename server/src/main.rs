@@ -443,7 +443,7 @@ fn update_user_handler(mut req: Request, res: Response, _: Captures) {
                     let email : &str = &update_user.user.email;
 
                     let mut sql = Core::new().unwrap();
-                    let get_user = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+                    let update_user_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
                         .and_then(|conn| { conn.query(                            
                             "UPDATE [dbo].[Users] SET [UserName]=@P2,[Bio]=@P3,[Image]=@P4, [Email] = @P5 WHERE [Id] = @P1; SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users] WHERE [Id] = @P1", 
                             &[&logged_in_user_id, &user_name, &bio, &image, &email]
@@ -462,7 +462,7 @@ fn update_user_handler(mut req: Request, res: Response, _: Captures) {
                             })
                         }
                     );
-                    sql.run(get_user).unwrap(); 
+                    sql.run(update_user_cmd).unwrap(); 
                 },
                 _ => {
                 }
@@ -659,7 +659,7 @@ fn get_profile_handler(req: Request, res: Response, c: Captures) {
 
     {
         let mut sql = Core::new().unwrap();
-        let get_user = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+        let get_profile_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
                 "SELECT TOP 1 [Email],[Token],[UserName],[Bio],[Image] ,
 ( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @P2 ) as Following
@@ -679,7 +679,7 @@ FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
                 Ok(())
             })
         );
-        sql.run(get_user).unwrap(); 
+        sql.run(get_profile_cmd).unwrap(); 
     }
 
     if result.is_some() {
@@ -760,7 +760,7 @@ fn follow_handler(req: Request, res: Response, c: Captures) {
 
     {
         let mut sql = Core::new().unwrap();
-        let get_user = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+        let follow_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
                 "INSERT INTO [dbo].[Followings] ([FollowingId] ,[FollowerId])
      SELECT @P2,(SELECT TOP (1) [Id]  FROM [Users] where UserName = @P1) EXCEPT SELECT [FollowingId] ,[FollowerId] from Followings;
@@ -782,7 +782,7 @@ FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
                 Ok(())
             })
         );
-        sql.run(get_user).unwrap(); 
+        sql.run(follow_cmd).unwrap(); 
     }
 
     if result.is_some() {
@@ -801,7 +801,7 @@ fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
 
     let mut sql = Core::new().unwrap();
     let email : &str = &login.user.email;
-    let get_user = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+    let get_user_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
         .and_then(|conn| conn.query( "SELECT TOP 1 [Token], [Id] FROM [dbo].[Users] WHERE [Email] = @P1", &[&email] )
         .for_each_row(|row| {
             let stored_hash : &str = row.get(0);
@@ -829,7 +829,7 @@ fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
             Ok(())
         })
     );
-    sql.run(get_user).unwrap(); 
+    sql.run(get_user_cmd).unwrap(); 
 }
 
 fn main() {    
