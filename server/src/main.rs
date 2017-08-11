@@ -428,6 +428,20 @@ fn create_article_test() {
     assert_eq!(res.status, hyper::Ok);
 }
 
+#[cfg(test)]
+#[test]
+fn get_tags_test() {
+    let client = Client::new();
+
+    let mut res = client.get("http://localhost:6767/api/tags")
+        .send()
+        .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+    //assert_eq!( buffer, r#"{"username":"Jacob","bio":null,"image":null,"following":false}"# );
+    assert_eq!(res.status, hyper::Ok);
+}
+
 fn update_user_handler(mut req: Request, res: Response, _: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
@@ -838,7 +852,7 @@ fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
     sql.run(get_user_cmd).unwrap(); 
 }
 
-fn get_tags_handler(_: Request, res: Response, c: Captures) {
+fn get_tags_handler(_: Request, res: Response, _: Captures) {
     let mut result : Option<GetTagsResult> = None; 
 
     {
