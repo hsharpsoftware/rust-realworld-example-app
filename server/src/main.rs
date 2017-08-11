@@ -1,4 +1,3 @@
-#[macro_use(bson, doc)]
 extern crate bson;
 
 extern crate iis;
@@ -33,31 +32,21 @@ extern crate slug;
 
 use futures::Future;
 use tokio_core::reactor::Core;
-use tiberius::{SqlConnection, BoxableIo, TdsError};
+use tiberius::{SqlConnection};
 use tiberius::stmt::ResultStreamExt;
-use tiberius::query::{ExecFuture};
-
-use futures_state_stream::{StateStream};
-
-use bson::oid::ObjectId;
-
-use bson::Bson;
 
 use chrono::prelude::*;
 
 use std::error::Error;
 use std::fs::File;
 use std::io::prelude::*;
-use std::path::Path;
 use std::env;
 use std::path::PathBuf;
 
 use hyper::server::{Server, Request, Response};
 use reroute::{RouterBuilder, Captures};
 use hyper::header::{Authorization, Bearer};
-use hyper::{Get, Post};
 use hyper::status::StatusCode;
-use hyper::Client;
 
 use crypto::sha2::Sha256;
 
@@ -179,6 +168,7 @@ struct CreateArticle {
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
+#[allow(non_snake_case)]
 struct CreateArticleDetail {
     title: String,
     description: String,
@@ -276,7 +266,7 @@ fn handle_row_no_value(_: tiberius::query::QueryRow) -> tiberius::TdsResult<()> 
     Ok(())
 }
 
-fn registration_handler(mut req: Request, res: Response, _: Captures) {
+fn registration_handler(mut req: Request, _: Response, _: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
     let registration : Registration = serde_json::from_str(&body).unwrap();     
@@ -300,6 +290,9 @@ fn registration_handler(mut req: Request, res: Response, _: Captures) {
     } );
      lp.run(future).unwrap();
 }
+
+#[cfg(test)]
+use hyper::Client;
 
 #[cfg(test)]
 #[test]
