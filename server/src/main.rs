@@ -86,6 +86,14 @@ struct Article {
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
+struct UpdateArticle {
+    title: Option<String>,
+    description : Option<String>,
+    body : Option<String>
+}
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
 struct Profile {
     username: String,
     bio: Option<String>,
@@ -423,6 +431,48 @@ fn create_article_test() {
         .header(Authorization(Bearer {token: jwt.to_owned()}))
         .body(r#"{"article": {"title": "How to train your dragon","description": "Ever wonder how?","body": "You have to believe",
                 "tagList": ["reactjs", "angularjs", "dragons"]}}"#)
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+}
+
+#[cfg(test)]
+#[test]
+fn get_article_test() {
+    let client = Client::new();
+
+    let res = client.post("http://localhost:6767/api/users/login")
+        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
+    let jwt = &token.0.token;
+
+    let res = client.post("http://localhost:6767/api/articles/aaa")
+        .header(Authorization(Bearer {token: jwt.to_owned()}))
+        .body("")
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+}
+
+#[cfg(test)]
+#[test]
+fn update_article_test() {
+    let client = Client::new();
+
+    let res = client.post("http://localhost:6767/api/users/login")
+        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
+    let jwt = &token.0.token;
+
+    let res = client.put("http://localhost:6767/api/articles")
+        .header(Authorization(Bearer {token: jwt.to_owned()}))
+        .body(r#"{"article": {"title": "How not to train your dragon","description": "Ever wonder what mistakes you did?","body": "You have to believe he's not going to eat you."}}"#)
         .send()
         .unwrap();
     assert_eq!(res.status, hyper::Ok);
@@ -936,11 +986,251 @@ fn add_comment_handler(mut req: Request, res: Response, c: Captures) {
     }   
 }
 
+// struct Article {
+//     slug: String,
+//     title: String,
+//     description : String,
+//     body : String,
+//     tagList: Vec<String>,
+//     createdAt: NaiveDateTime,
+//     updatedAt: Option<NaiveDateTime>,
+//     favorited : bool,
+//     favoritesCount : i32,
+//     author : Profile
+// }
+
+fn get_article_handler(mut req: Request, res: Response, c: Captures) {
+    let mut body = String::new();
+    let _ = req.read_to_string(&mut body);    
+    //let token =  req.headers.get::<Authorization<Bearer>>(); 
+
+    let caps = c.unwrap();
+    let slug = &caps[0].replace("/api/articles/", "");
+    println!("slug: {}", slug);
+
+    let mut result : Option<Article> = None; 
+    {
+        let mut sql = Core::new().unwrap();
+        let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+            .and_then(|conn| conn.query(                            
+                "SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
+INNER JOIN Users u ON a.Author = u.Id
+where Slug = @p1;", &[&(slug.as_str())]
+            ).for_each_row(|row| {
+                let slug : &str = row.get(0);
+                let title : &str = row.get(1);
+                let description : &str = row.get(2);
+                let body : &str = row.get(3);
+                let created_at : NaiveDateTime = row.get(4);
+                let updated_at : Option<chrono::NaiveDateTime> = row.get(5);
+                let user_name : &str = row.get(6);
+                let bio : Option<&str> = row.get(7);
+                let image :Option<&str> = row.get(8);
+                
+                let tag_list : Vec<String> = Vec::new();
+                let favorited : bool = true;
+                let favorites_count : i32 = 3;
+                let author = Profile{ username:user_name.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:false };
+                result = Some(Article{ 
+                    slug:slug.to_string(), title:title.to_string(), description:description.to_string(), body:body.to_string(), tagList:tag_list, createdAt:created_at, updatedAt:updated_at, favorited:favorited, favoritesCount:favorites_count, author:author
+                });
+                Ok(())
+            })
+        );
+        sql.run(get_cmd).unwrap(); 
+    }
+
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }   
+}
+
+fn update_article_handler(mut req: Request, res: Response, c: Captures) {
+    let mut body = String::new();
+    let _ = req.read_to_string(&mut body);    
+    let token = req.headers.get::<Authorization<Bearer>>(); 
+    let mut result : Option<User> = None; 
+
+    let caps = c.unwrap();
+    let slug = &caps[0].replace("/api/articles/", "");
+
+
+    match token {
+        Some(token) => {
+            let jwt = &token.0.token;
+            let logged_in_user_id = login(&jwt);  
+
+            match logged_in_user_id {
+                Some(logged_in_user_id) => {
+                    println!("logged_in_user {}", &logged_in_user_id);
+
+                    let update_article : UpdateArticle = serde_json::from_str(&body).unwrap();     
+                    let title : Option<String> = update_article.title;
+                    let body : Option<String> = update_article.body;
+                    let description : Option<String> = update_article.description;
+                    
+                    if title.is_some() {
+                        let t = &title.unwrap();
+                        let mut sql = Core::new().unwrap();
+                        let s = slugify(t);
+
+                        let update_user_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+                        .and_then(|conn| { conn.query(                            
+                            "UPDATE TOP(1) [dbo].[Articles] SET [Title]=@P1, [Slug]=@P2 WHERE [Slug] = @P3; 
+                                SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
+                                INNER JOIN Users u ON a.Author = u.Id
+                                where Slug = @P2;", 
+                                &[&(t.as_str()), &(s.as_str()), &(slug.as_str())]
+                            )
+                            .for_each_row(|row| {
+                                let email : &str = row.get(0);
+                                let token : &str = row.get(1);
+                                let user_name : &str = row.get(2);
+                                let bio : Option<&str> = row.get(3);
+                                let image : Option<&str> = row.get(4);
+                                result = Some(User{ 
+                                    email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
+                                    image:image.map(|s| s.to_string()), username:user_name.to_string()
+                                });
+                                Ok(())
+                            })
+                        }
+                    );
+                    sql.run(update_user_cmd).unwrap(); 
+                    }
+
+                    if body.is_some() {
+                        let t = body.unwrap();
+                        let mut sql = Core::new().unwrap();
+
+                        let update_user_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+                        .and_then(|conn| { conn.query(                            
+                            "UPDATE TOP(1) [dbo].[Articles] SET [Body]=@P1 WHERE [Slug] = @P2; 
+                                SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
+                                INNER JOIN Users u ON a.Author = u.Id
+                                where Slug = @P2;", 
+                                &[&(t.as_str()), &(slug.as_str())]
+                            )
+                            .for_each_row(|row| {
+                                let email : &str = row.get(0);
+                                let token : &str = row.get(1);
+                                let user_name : &str = row.get(2);
+                                let bio : Option<&str> = row.get(3);
+                                let image : Option<&str> = row.get(4);
+                                result = Some(User{ 
+                                    email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
+                                    image:image.map(|s| s.to_string()), username:user_name.to_string()
+                                });
+                                Ok(())
+                            })
+                        }
+                    );
+                    sql.run(update_user_cmd).unwrap(); 
+                    }
+
+                    if description.is_some() {
+                        let t = description.unwrap();
+                        let mut sql = Core::new().unwrap();
+
+                        let update_user_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+                        .and_then(|conn| { conn.query(                            
+                            "UPDATE TOP(1) [dbo].[Articles] SET [Description]=@P1 WHERE [Slug] = @P2; 
+                                SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
+                                INNER JOIN Users u ON a.Author = u.Id
+                                where Slug = @P2;", 
+                                &[&(t.as_str()), &(slug.as_str())]
+                            )
+                            .for_each_row(|row| {
+                                let email : &str = row.get(0);
+                                let token : &str = row.get(1);
+                                let user_name : &str = row.get(2);
+                                let bio : Option<&str> = row.get(3);
+                                let image : Option<&str> = row.get(4);
+                                result = Some(User{ 
+                                    email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
+                                    image:image.map(|s| s.to_string()), username:user_name.to_string()
+                                });
+                                Ok(())
+                            })
+                        }
+                    );
+                    sql.run(update_user_cmd).unwrap(); 
+                    }
+
+                },
+                _ => {
+                }
+            }
+        }
+        _ => {
+
+        }
+    }
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }      
+}
+
+fn delete_article_handler(mut req: Request, res: Response, c: Captures) {
+    let mut body = String::new();
+    let _ = req.read_to_string(&mut body);    
+    let token =  req.headers.get::<Authorization<Bearer>>(); 
+
+    let caps = c.unwrap();
+    let slug = &caps[0].replace("/api/articles/", "");
+    println!("slug: {}", slug);
+
+    let mut result : Option<Article> = None; 
+    {
+        let mut sql = Core::new().unwrap();
+        let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+            .and_then(|conn| conn.query(                            
+                "SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
+INNER JOIN Users u ON a.Author = u.Id
+where Slug = @p1; 
+               ", &[&(slug.as_str())]
+            ).for_each_row(|row| {
+                let slug : &str = row.get(0);
+                let title : &str = row.get(1);
+                let description : &str = row.get(2);
+                let body : &str = row.get(3);
+                let createdAt : NaiveDateTime = row.get(4);
+                let updatedAt : Option<chrono::NaiveDateTime> = row.get(5);
+                let userName : &str = row.get(6);
+                let bio : Option<&str> = row.get(7);
+                let image :Option<&str> = row.get(8);
+                
+                let tagList : Vec<String> = Vec::new();
+                let favorited : bool = true;
+                let favoritesCount : i32 = 3;
+                let author = Profile{ username:userName.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:false };
+                result = Some(Article{ 
+                    slug:slug.to_string(), title:title.to_string(), description:description.to_string(), body:body.to_string(), tagList:tagList, createdAt:createdAt, updatedAt:updatedAt, favorited:favorited, favoritesCount:favoritesCount, author:author
+                });
+                Ok(())
+            })
+        );
+        sql.run(get_cmd).unwrap(); 
+    }
+
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }   
+}
 
 fn main() {    
     let port = iis::get_port();
 
-    let listen_on = format!("0.0.0.0:{}", port);
+    let listen_on = format!("127.0.0.1:{}", port);
 
     println!("Listening on {}", listen_on);
 
@@ -960,7 +1250,10 @@ fn main() {
     builder.post(r"/api/articles", create_article_handler);   
     builder.get(r"/api/profiles/.*", get_profile_handler);   
     builder.get(r"/api/tags", get_tags_handler);   
-    builder.post(r"/api/articles/.*", add_comment_handler);   
+    builder.post(r"/api/articles/.*", add_comment_handler);  
+    builder.put(r"/api/articles/.*", update_article_handler);   
+    builder.get(r"/api/articles/.*", get_article_handler);  
+    builder.delete(r"/api/articles/.*", delete_article_handler);  
 
     let router = builder.finalize().unwrap(); 
 
