@@ -449,7 +449,7 @@ fn get_article_test() {
     let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
     let jwt = &token.0.token;
 
-    let res = client.post("http://localhost:6767/api/articles/aaa")
+    let res = client.get("http://localhost:6767/api/articles/aaa")
         .header(Authorization(Bearer {token: jwt.to_owned()}))
         .body("")
         .send()
@@ -470,7 +470,7 @@ fn update_article_test() {
     let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
     let jwt = &token.0.token;
 
-    let res = client.put("http://localhost:6767/api/articles")
+    let res = client.put("http://localhost:6767/api/articles/aaa")
         .header(Authorization(Bearer {token: jwt.to_owned()}))
         .body(r#"{"article": {"title": "How not to train your dragon","description": "Ever wonder what mistakes you did?","body": "You have to believe he's not going to eat you."}}"#)
         .send()
@@ -1015,7 +1015,7 @@ fn get_article_handler(mut req: Request, res: Response, c: Captures) {
             .and_then(|conn| conn.query(                            
                 "SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
 INNER JOIN Users u ON a.Author = u.Id
-where Slug = @p1;", &[&(slug.as_str())]
+where Slug = @p1", &[&(slug.as_str())]
             ).for_each_row(|row| {
                 let slug : &str = row.get(0);
                 let title : &str = row.get(1);
