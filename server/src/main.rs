@@ -449,7 +449,7 @@ fn favorite_article_test() {
     let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
     let jwt = &token.0.token;
 
-    let res = client.post("http://localhost:6767/api/articles/aaa/favorite")
+    let res = client.post("http://localhost:6767/api/articles/how-to-train-your-dragon/favorite")
         .header(Authorization(Bearer {token: jwt.to_owned()}))
         .body("")
         .send()
@@ -470,7 +470,7 @@ fn get_article_test() {
     let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
     let jwt = &token.0.token;
 
-    let res = client.get("http://localhost:6767/api/articles/aaa")
+    let res = client.get("http://localhost:6767/api/articles/how-to-train-your-dragon")
         .header(Authorization(Bearer {token: jwt.to_owned()}))
         .body("")
         .send()
@@ -491,7 +491,7 @@ fn update_article_test() {
     let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
     let jwt = &token.0.token;
 
-    let res = client.put("http://localhost:6767/api/articles/aaa")
+    let res = client.put("http://localhost:6767/api/articles/how-to-train-your-dragon")
         .header(Authorization(Bearer {token: jwt.to_owned()}))
         .body(r#"{"article": {"title": "How not to train your dragon","description": "Ever wonder what mistakes you did?","body": "You have to believe he's not going to eat you."}}"#)
         .send()
@@ -512,7 +512,7 @@ fn delete_article_test() {
     let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
     let jwt = &token.0.token;
 
-    let res = client.delete("http://localhost:6767/api/articles/aaa")
+    let res = client.delete("http://localhost:6767/api/articles/how-to-train-your-dragon")
         .header(Authorization(Bearer {token: jwt.to_owned()}))
         .body("")
         .send()
@@ -1049,7 +1049,7 @@ fn favorite_article_handler(mut req: Request, res: Response, c: Captures) {
         let mut sql = Core::new().unwrap();
         let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
-                "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1
+                "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1;
                 INSERT INTO [dbo].[FavoritedArticles]
 	            ([ArticleId],
 	            [UserId])
@@ -1337,13 +1337,12 @@ fn main() {
     builder.get(r"/test", test_handler);   
     builder.put(r"/api/user", update_user_handler);   
     builder.get(r"/api/profiles/.*", get_profile_handler);   
-    builder.post(r"/api/profiles/.*", follow_handler);   
-    builder.delete(r"/api/profiles/.*", unfollow_handler);  
+    builder.post(r"/api/profiles/.*/follow", follow_handler);   
+    builder.delete(r"/api/profiles/.*/follow", unfollow_handler);  
     builder.post(r"/api/articles", create_article_handler);   
-    builder.get(r"/api/profiles/.*", get_profile_handler);   
     builder.get(r"/api/tags", get_tags_handler);   
-    builder.post(r"/api/articles/.*", add_comment_handler);  
-    builder.post(r"/api/articles/.*", favorite_article_handler);  
+    builder.post(r"/api/articles/.*/comments", add_comment_handler);  
+    builder.post(r"/api/articles/.*/favorite", favorite_article_handler);  
     builder.put(r"/api/articles/.*", update_article_handler);   
     builder.get(r"/api/articles/.*", get_article_handler);  
     builder.delete(r"/api/articles/.*", delete_article_handler);  
