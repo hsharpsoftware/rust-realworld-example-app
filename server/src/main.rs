@@ -223,7 +223,7 @@ fn get_database_config() -> DatabaseConfig {
             Ok(lang) => lang,
             Err(_) => "".to_string(),
         };
-    let mut content = env_config;
+    let mut content = env_config.replace( "&&&", "\n");
 
     let mut path = PathBuf::from(env::current_dir().unwrap());
     path.push(CONFIG_FILE_NAME);
