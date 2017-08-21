@@ -31,6 +31,16 @@ CREATE TABLE [dbo].[Followings](
 	[FollowerId] [int] NOT NULL
 ) ON [PRIMARY]
 GO
+/****** Object:  Table [dbo].[FavoritedArticles]    Script Date: 6/8/2017 5:52:08 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[FavoritedArticles](
+	[ArticleId] [int] NOT NULL,
+	[UserId] [int] NOT NULL
+) ON [PRIMARY]
+GO
 /****** Object:  Table [dbo].[Users]    Script Date: 6/8/2017 5:52:08 PM ******/
 SET ANSI_NULLS ON
 GO
