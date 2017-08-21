@@ -217,21 +217,30 @@ lazy_static! {
 }
 
 fn get_database_config() -> DatabaseConfig {
+
+    let env_config = 
+        match env::var("DATABASECONFIG") {
+            Ok(lang) => lang,
+            Err(_) => "".to_string(),
+        };
+    let mut content = env_config;
+
     let mut path = PathBuf::from(env::current_dir().unwrap());
     path.push(CONFIG_FILE_NAME);
     let display = path.display();
 
-    let mut file = match File::open(&path) {
-        Err(why) => panic!("couldn't open {}: {}", display,
-                                                   why.description()),
-        Ok(file) => file,
-    };
+    if path.exists() {
+        let mut file = match File::open(&path) {
+            Err(why) => panic!("couldn't open {}: {}", display,
+                                                    why.description()),
+            Ok(file) => file,
+        };
 
-    let mut content = String::new();
-    match file.read_to_string(&mut content) {
-        Err(why) => panic!("couldn't read {}: {}", display,
-                                                   why.description()),
-        Ok(_) => print!("{} contains:\n{}", display, content),
+        match file.read_to_string(&mut content) {
+            Err(why) => panic!("couldn't read {}: {}", display,
+                                                    why.description()),
+            Ok(_) => print!("{} contains:\n{}", display, content),
+        }
     }
 
     let toml_str : &str = &content;
