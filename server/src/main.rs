@@ -468,6 +468,27 @@ fn favorite_article_test() {
 
 #[cfg(test)]
 #[test]
+fn unfavorite_article_test() {
+    let client = Client::new();
+
+    let res = client.post("http://localhost:6767/api/users/login")
+        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
+    let jwt = &token.0.token;
+
+    let res = client.delete("http://localhost:6767/api/articles/how-to-train-your-dragon/favorite")
+        .header(Authorization(Bearer {token: jwt.to_owned()}))
+        .body("")
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+}
+
+#[cfg(test)]
+#[test]
 fn get_article_test() {
     let client = Client::new();
 
@@ -480,6 +501,27 @@ fn get_article_test() {
     let jwt = &token.0.token;
 
     let res = client.get("http://localhost:6767/api/articles/how-to-train-your-dragon")
+        .header(Authorization(Bearer {token: jwt.to_owned()}))
+        .body("")
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+}
+
+#[cfg(test)]
+#[test]
+fn list_article_test() {
+    let client = Client::new();
+
+    let res = client.post("http://localhost:6767/api/users/login")
+        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
+    let jwt = &token.0.token;
+
+    let res = client.get("http://localhost:6767/api/articles?tag=ABC")
         .header(Authorization(Bearer {token: jwt.to_owned()}))
         .body("")
         .send()
@@ -1100,6 +1142,121 @@ fn favorite_article_handler(mut req: Request, res: Response, c: Captures) {
     }   
 }
 
+fn unfavorite_article_handler(mut req: Request, res: Response, c: Captures) {
+    let mut body = String::new();
+    let _ = req.read_to_string(&mut body);    
+    let token =  req.headers.get::<Authorization<Bearer>>(); 
+    let logged_id : i32 =  
+        match token {
+            Some(token) => {
+                let jwt = &token.0.token;
+                login(&jwt).unwrap()
+
+            }
+            _ => 0
+        };
+
+    let caps = c.unwrap();
+    let slug = &caps[0].replace("/api/articles/", "").replace("/favorite", "");
+    println!("slug: {}", slug);
+
+    let mut result : Option<Article> = None; 
+    {
+        let mut sql = Core::new().unwrap();
+        let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+            .and_then(|conn| conn.query(                            
+                "declare @id int; 
+                select TOP(1) @id = id from Articles where Slug = @P1;
+                DELETE TOP(1) FROM Articles WHERE Id = @id;
+                select TOP(1) @id = id from Articles;
+                SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
+                    INNER JOIN Users u ON a.Author = u.Id
+                    where a.Id = @id
+                "
+                , &[&(slug.as_str()), &(logged_id)]
+            ).for_each_row(|row| {
+                let slug : &str = row.get(0);
+                let title : &str = row.get(1);
+                let description : &str = row.get(2);
+                let body : &str = row.get(3);
+                let created_at : NaiveDateTime = row.get(4);
+                let updated_at : Option<chrono::NaiveDateTime> = row.get(5);
+                let user_name : &str = row.get(6);
+                let bio : Option<&str> = row.get(7);
+                let image :Option<&str> = row.get(8);
+                
+                let tag_list : Vec<String> = Vec::new();
+                let favorited : bool = true;
+                let favorites_count : i32 = 3;
+                let author = Profile{ username:user_name.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:false };
+                result = Some(Article{ 
+                    slug:slug.to_string(), title:title.to_string(), description:description.to_string(), body:body.to_string(), tagList:tag_list, createdAt:created_at, updatedAt:updated_at, favorited:favorited, favoritesCount:favorites_count, author:author
+                });
+                Ok(())
+            })
+        );
+        sql.run(get_cmd).unwrap(); 
+    }
+
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }   
+}
+
+fn list_article_handler(mut req: Request, res: Response, c: Captures) {
+    let mut body = String::new();
+    let _ = req.read_to_string(&mut body); 
+    
+    let caps = c.unwrap();
+    let params = &caps[0].replace("/api/articles?", "");
+    println!("params: {}", params);
+
+    let pars: Vec<&str> = params.split('=').collect();
+
+    let mut result : Option<Article> = None; 
+    {
+        let mut sql = Core::new().unwrap();
+        let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+            .and_then(|conn| conn.query(                            
+                "SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
+INNER JOIN Users u ON a.Author = u.Id
+where Slug = @p1", &[&(params.as_str())]
+            ).for_each_row(|row| {
+                let slug : &str = row.get(0);
+                let title : &str = row.get(1);
+                let description : &str = row.get(2);
+                let body : &str = row.get(3);
+                let created_at : NaiveDateTime = row.get(4);
+                let updated_at : Option<chrono::NaiveDateTime> = row.get(5);
+                let user_name : &str = row.get(6);
+                let bio : Option<&str> = row.get(7);
+                let image :Option<&str> = row.get(8);
+                
+                let tag_list : Vec<String> = Vec::new();
+                let favorited : bool = true;
+                let favorites_count : i32 = 3;
+                let author = Profile{ username:user_name.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:false };
+                result = Some(Article{ 
+                    slug:slug.to_string(), title:title.to_string(), description:description.to_string(), body:body.to_string(), tagList:tag_list, createdAt:created_at, updatedAt:updated_at, favorited:favorited, favoritesCount:favorites_count, author:author
+                });
+                Ok(())
+            })
+        );
+        sql.run(get_cmd).unwrap(); 
+    }
+
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }   
+}
+
+
 fn get_article_handler(mut req: Request, res: Response, c: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
@@ -1352,8 +1509,10 @@ fn main() {
     builder.get(r"/api/tags", get_tags_handler);   
     builder.post(r"/api/articles/.*/comments", add_comment_handler);  
     builder.post(r"/api/articles/.*/favorite", favorite_article_handler);  
+    builder.delete(r"/api/articles/.*/favorite", unfavorite_article_handler);
     builder.put(r"/api/articles/.*", update_article_handler);   
     builder.get(r"/api/articles/.*", get_article_handler);  
+    builder.get(r"/api/articles?.*", list_article_handler);  
     builder.delete(r"/api/articles/.*", delete_article_handler);  
 
     let router = builder.finalize().unwrap(); 
