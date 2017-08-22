@@ -533,7 +533,7 @@ fn list_article_test() {
     let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
     let jwt = &token.0.token;
 
-    let res = client.get("http://localhost:6767/api/articles?tag=ABC")
+    let res = client.get("http://localhost:6767/api/articles?tag=dragons")
         .header(Authorization(Bearer {token: jwt.to_owned()}))
         .body("")
         .send()
@@ -1600,6 +1600,7 @@ fn main() {
     builder.delete(r"/api/articles/.*/favorite", unfavorite_article_handler);
     builder.put(r"/api/articles/.*", update_article_handler);   
     builder.get(r"/api/articles/.*", get_article_handler);  
+    builder.get(r"/api/articles?.*", list_article_handler); 
     builder.delete(r"/api/articles/.*/comments/.*", delete_comment_handler);  
     builder.delete(r"/api/articles/.*", delete_article_handler);  
 
