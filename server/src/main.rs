@@ -168,6 +168,18 @@ struct UpdateUser {
     user: UpdateUserDetail,
 }
 
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
+struct AddComment {
+    comment: AddCommentDetail,
+}
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
+#[allow(non_snake_case)]
+struct AddCommentDetail {
+    body: String,
+}
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
@@ -522,7 +534,7 @@ fn list_article_test() {
     let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
     let jwt = &token.0.token;
 
-    let res = client.get("http://localhost:6767/api/articles?tag=ABC&author=Jake")
+    let res = client.get("http://localhost:6767/api/articles?tag=dragons")
         .header(Authorization(Bearer {token: jwt.to_owned()}))
         .body("")
         .send()
@@ -585,6 +597,28 @@ fn get_tags_test() {
     //assert_eq!( buffer, r#"{"username":"Jacob","bio":null,"image":null,"following":false}"# );
     assert_eq!(res.status, hyper::Ok);
 }
+
+#[cfg(test)]
+#[test]
+fn add_comment_test() {
+    let client = Client::new();
+
+    let res = client.post("http://localhost:6767/api/users/login")
+        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
+    let jwt = &token.0.token;
+
+    let res = client.post("http://localhost:6767/api/articles/how-to-train-your-dragon/comments")
+        .header(Authorization(Bearer {token: jwt.to_owned()}))
+        .body(r#"{"comment": {"body": "His name was my name too."}}"#)
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+}
+
 
 fn update_user_handler(mut req: Request, res: Response, _: Captures) {
     let mut body = String::new();
@@ -1026,6 +1060,10 @@ fn get_tags_handler(_: Request, res: Response, _: Captures) {
 fn add_comment_handler(mut req: Request, res: Response, c: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
+    let add_comment : AddComment = serde_json::from_str(&body).unwrap(); 
+    let comment_body = add_comment.comment.body;
+    println!("comment_body: {}", comment_body);
+    
     let token =  req.headers.get::<Authorization<Bearer>>(); 
     let logged_id : i32 =  
         match token {
@@ -1047,11 +1085,11 @@ fn add_comment_handler(mut req: Request, res: Response, c: Captures) {
         let mut sql = Core::new().unwrap();
         let follow_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
-                "declare @id int; select @id = id from Articles where Slug = @p1; 
+                "declare @id int; select top 1 @id = id from Articles where Slug = @p1 ORDER BY 1; 
                 insert into Comments (createdAt, body, ArticleId ) values (getdate(), @p3, @id);
                 select Comments.Id, createdAt, body,  Users.UserName, Users.Bio, Users.[Image] 
                 from Comments, Users where Comments.Id = SCOPE_IDENTITY() and Users.Id = @p2
-                ", &[&(slug.as_str()), &logged_id]
+                ", &[&(slug.as_str()), &logged_id, &(comment_body.as_str()) ]
             ).for_each_row(|row| {
                 let id : i32 = row.get(0);
                 let created_at : NaiveDateTime = row.get(1);
@@ -1101,7 +1139,7 @@ fn favorite_article_handler(mut req: Request, res: Response, c: Captures) {
         let mut sql = Core::new().unwrap();
         let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
-                "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1;
+                "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1 ORDER BY 1;
                 INSERT INTO [dbo].[FavoritedArticles]
 	            ([ArticleId],
 	            [UserId])
@@ -1167,9 +1205,9 @@ fn unfavorite_article_handler(mut req: Request, res: Response, c: Captures) {
         let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
                 "declare @id int; 
-                select TOP(1) @id = id from Articles where Slug = @P1;
+                select TOP(1) @id = id from Articles where Slug = @P1 ORDER BY 1;
                 DELETE TOP(1) FROM Articles WHERE Id = @id;
-                select TOP(1) @id = id from Articles;
+                select TOP(1) @id = id from Articles ORDER BY 1;
                 SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
                     INNER JOIN Users u ON a.Author = u.Id
                     where a.Id = @id
@@ -1521,6 +1559,56 @@ where Slug = @P1;
     }   
 }
 
+fn delete_comment_handler(mut req: Request, res: Response, c: Captures) {
+    let mut body = String::new();
+    let _ = req.read_to_string(&mut body);   
+
+    let caps = c.unwrap();
+    let slug = &caps[0].replace("/api/articles/", "");
+    println!("slug: {}", slug);
+
+    let mut result : Option<Article> = None; 
+    {
+        let mut sql = Core::new().unwrap();
+        let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+            .and_then(|conn| conn.query(                            
+                "DELETE TOP(1) FROM Articles WHERE slug = @P1;
+                SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
+INNER JOIN Users u ON a.Author = u.Id
+where Slug = @P1; 
+               ", &[&(slug.as_str())]
+            ).for_each_row(|row| {
+                let slug : &str = row.get(0);
+                let title : &str = row.get(1);
+                let description : &str = row.get(2);
+                let body : &str = row.get(3);
+                let created_at : NaiveDateTime = row.get(4);
+                let updated_at : Option<chrono::NaiveDateTime> = row.get(5);
+                let user_name : &str = row.get(6);
+                let bio : Option<&str> = row.get(7);
+                let image :Option<&str> = row.get(8);
+                
+                let tag_list : Vec<String> = Vec::new();
+                let favorited : bool = true;
+                let favorites_count : i32 = 3;
+                let author = Profile{ username:user_name.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:false };
+                result = Some(Article{ 
+                    slug:slug.to_string(), title:title.to_string(), description:description.to_string(), body:body.to_string(), tagList:tag_list, createdAt:created_at, updatedAt:updated_at, favorited:favorited, favoritesCount:favorites_count, author:author
+                });
+                Ok(())
+            })
+        );
+        sql.run(get_cmd).unwrap(); 
+    }
+
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }   
+}
+
 fn main() {    
     let port = iis::get_port();
 
@@ -1548,7 +1636,8 @@ fn main() {
     builder.delete(r"/api/articles/.*/favorite", unfavorite_article_handler);
     builder.put(r"/api/articles/.*", update_article_handler);   
     builder.get(r"/api/articles/.*", get_article_handler);  
-    builder.get(r"/api/articles?.*", list_article_handler);  
+    builder.get(r"/api/articles?.*", list_article_handler); 
+    builder.delete(r"/api/articles/.*/comments/.*", delete_comment_handler);  
     builder.delete(r"/api/articles/.*", delete_article_handler);  
 
     let router = builder.finalize().unwrap(); 
