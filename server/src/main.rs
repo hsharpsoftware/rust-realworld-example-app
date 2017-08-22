@@ -1306,6 +1306,8 @@ fn list_article_handler(mut req: Request, res: Response, c: Captures) {
             where_clause.push_str("
                 INNER JOIN ArticleTags at 
                     ON a.Id = at.ArticleId
+                INNER JOIN Users u 
+	                ON a.Author = u.Id
                 INNER JOIN Tags t
                     ON at.TagId = t.Id AND t.Tag='");
             where_clause.push_str(name_value[1]);
@@ -1320,7 +1322,7 @@ fn list_article_handler(mut req: Request, res: Response, c: Captures) {
         }
         else if name_value[0] == "favorited" {
             where_clause.push_str("
-                NNER JOIN FavoritedArticles fa 
+                INNER JOIN FavoritedArticles fa 
 	                ON a.Id = fa.ArticleId
                 INNER JOIN Users u
 	                ON fa.UserId = u.Id AND u.UserName='");
