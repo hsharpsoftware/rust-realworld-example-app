@@ -1,4 +1,5 @@
 cd server
 call build.cmd
 cd ..
-exit 0
+exit /B 0
+
