@@ -1084,7 +1084,7 @@ fn add_comment_handler(mut req: Request, res: Response, c: Captures) {
         let mut sql = Core::new().unwrap();
         let follow_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
-                "declare @id int; select @id = id from Articles where Slug = @p1; 
+                "declare @id int; select top 1 @id = id from Articles where Slug = @p1 ORDER BY 1; 
                 insert into Comments (createdAt, body, ArticleId ) values (getdate(), @p3, @id);
                 select Comments.Id, createdAt, body,  Users.UserName, Users.Bio, Users.[Image] 
                 from Comments, Users where Comments.Id = SCOPE_IDENTITY() and Users.Id = @p2
@@ -1138,7 +1138,7 @@ fn favorite_article_handler(mut req: Request, res: Response, c: Captures) {
         let mut sql = Core::new().unwrap();
         let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
-                "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1;
+                "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1 ORDER BY 1;
                 INSERT INTO [dbo].[FavoritedArticles]
 	            ([ArticleId],
 	            [UserId])
@@ -1204,9 +1204,9 @@ fn unfavorite_article_handler(mut req: Request, res: Response, c: Captures) {
         let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
                 "declare @id int; 
-                select TOP(1) @id = id from Articles where Slug = @P1;
+                select TOP(1) @id = id from Articles where Slug = @P1 ORDER BY 1;
                 DELETE TOP(1) FROM Articles WHERE Id = @id;
-                select TOP(1) @id = id from Articles;
+                select TOP(1) @id = id from Articles ORDER BY 1;
                 SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
                     INNER JOIN Users u ON a.Author = u.Id
                     where a.Id = @id
