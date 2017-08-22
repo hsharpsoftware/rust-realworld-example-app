@@ -1,4 +1,4 @@
 cd server
 call build.cmd
 cd ..
-exit 0
+IF DEFINED %APPVEYOR% (exit 0)
