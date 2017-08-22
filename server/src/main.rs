@@ -34,6 +34,7 @@ use futures::Future;
 use tokio_core::reactor::Core;
 use tiberius::{SqlConnection};
 use tiberius::stmt::ResultStreamExt;
+use tiberius::stmt::Statement;
 
 use chrono::prelude::*;
 
@@ -521,7 +522,7 @@ fn list_article_test() {
     let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
     let jwt = &token.0.token;
 
-    let res = client.get("http://localhost:6767/api/articles?tag=ABC")
+    let res = client.get("http://localhost:6767/api/articles?tag=ABC&author=Jake")
         .header(Authorization(Bearer {token: jwt.to_owned()}))
         .body("")
         .send()
@@ -1209,22 +1210,57 @@ fn unfavorite_article_handler(mut req: Request, res: Response, c: Captures) {
 fn list_article_handler(mut req: Request, res: Response, c: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body); 
-    
-    let caps = c.unwrap();
-    let params = &caps[0].replace("/api/articles?", "");
-    println!("params: {}", params);
 
-    let pars: Vec<&str> = params.split('=').collect();
+    let caps = c.unwrap();
+    let url_params = &caps[0].replace("/api/articles?", "");
+
+    let parsed_params: Vec<&str> = url_params.split('&').collect();
+
+    let mut where_clause = String::new();
+
+    for param in &parsed_params {
+        let name_value: Vec<&str> = param.split('=').collect();
+
+        if name_value[0] == "tag" {
+            where_clause.push_str("
+                INNER JOIN ArticleTags at 
+                    ON a.Id = at.ArticleId
+                INNER JOIN Tags t
+                    ON at.TagId = t.Id AND t.Tag='");
+            where_clause.push_str(name_value[1]);
+            where_clause.push_str("' ");
+        } 
+        else if name_value[0] == "author" {
+            where_clause.push_str("
+                INNER JOIN Users u 
+	                ON a.Author = u.Id AND u.UserName = '");
+            where_clause.push_str(name_value[1]);
+            where_clause.push_str("' ");
+        }
+        else if name_value[0] == "favorited" {
+            where_clause.push_str("
+                NNER JOIN FavoritedArticles fa 
+	                ON a.Id = fa.ArticleId
+                INNER JOIN Users u
+	                ON fa.UserId = u.Id AND u.UserName='");
+            where_clause.push_str(name_value[1]);
+            where_clause.push_str("'");
+        };
+    }
+
+    let mut select_clause = String::from("SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a ");
+    select_clause.push_str(&where_clause);
+
+    println!("select_clause: {}", select_clause);
+
+    let sql_command: Statement = Statement::from(select_clause);
 
     let mut result : Option<Article> = None; 
     {
         let mut sql = Core::new().unwrap();
         let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-            .and_then(|conn| conn.query(                            
-                "SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
-INNER JOIN Users u ON a.Author = u.Id
-where Slug = @p1", &[&(params.as_str())]
-            ).for_each_row(|row| {
+            .and_then(|conn| conn.query(sql_command, &[])
+            .for_each_row(|row| {
                 let slug : &str = row.get(0);
                 let title : &str = row.get(1);
                 let description : &str = row.get(2);
