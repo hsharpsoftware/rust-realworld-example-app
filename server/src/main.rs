@@ -115,6 +115,13 @@ struct Comment {
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
+#[allow(non_snake_case)]
+struct CommentResult {
+    comment: Comment,
+}
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
 struct InternalError {
     errors : ErrorDetail
 }
@@ -619,6 +626,41 @@ fn add_comment_test() {
     assert_eq!(res.status, hyper::Ok);
 }
 
+#[cfg(test)]
+#[test]
+fn delete_comment_test() {
+    let client = Client::new();
+
+    let res = client.post("http://localhost:6767/api/users/login")
+        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
+    let jwt = &token.0.token;
+
+    let mut res = client.post("http://localhost:6767/api/articles/how-to-train-your-dragon/comments")
+        .header(Authorization(Bearer {token: jwt.to_owned()}))
+        .body(r#"{"comment": {"body": "His name was my name too."}}"#)
+        .send()
+        .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+    assert_eq!(res.status, hyper::Ok);
+
+    println!("Got result:{:?}", buffer);
+    let comment_result : CommentResult = serde_json::from_str(&buffer).unwrap();
+    println!("Comment result:{:?}", comment_result);
+
+    let mut res = client.delete(&(format!("http://localhost:6767/api/articles/how-to-train-your-dragon/comments/{}", comment_result.comment.id)))
+        .header(Authorization(Bearer {token: jwt.to_owned()}))
+        .body(r#"{"comment": {"body": "His name was my name too."}}"#)
+        .send()
+        .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+    assert_eq!(res.status, hyper::Ok);
+}
 
 fn update_user_handler(mut req: Request, res: Response, _: Captures) {
     let mut body = String::new();
@@ -1079,7 +1121,7 @@ fn add_comment_handler(mut req: Request, res: Response, c: Captures) {
     let slug = &caps[0].replace("/api/articles/", "").replace("/comments", "");
     println!("slug: {}", slug);
 
-    let mut result : Option<Comment> = None; 
+    let mut result : Option<CommentResult> = None; 
 
     {
         let mut sql = Core::new().unwrap();
@@ -1098,10 +1140,11 @@ fn add_comment_handler(mut req: Request, res: Response, c: Captures) {
                 let bio : Option<&str> = row.get(4);
                 let image : Option<&str> = row.get(5);
                 let profile = Profile{ username:user_name.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:false };
-                result = Some(Comment{ 
+                let comment = Comment{ 
                     id:id, createdAt:created_at, updatedAt:created_at,
                     body:body.to_string(), author: profile
-                });
+                };
+                result = Some(CommentResult{comment:comment});
                 Ok(())
             })
         );
@@ -1564,37 +1607,23 @@ fn delete_comment_handler(mut req: Request, res: Response, c: Captures) {
     let _ = req.read_to_string(&mut body);   
 
     let caps = c.unwrap();
-    let slug = &caps[0].replace("/api/articles/", "");
+    let url_params = &caps[0];
+    let slug = "aaa";
+    let id = "0".to_string();
+    println!("url_params: {}",url_params);
     println!("slug: {}", slug);
+    println!("id: {}", id);
 
     let mut result : Option<Article> = None; 
     {
         let mut sql = Core::new().unwrap();
         let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
-                "DELETE TOP(1) FROM Articles WHERE slug = @P1;
-                SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
-INNER JOIN Users u ON a.Author = u.Id
-where Slug = @P1; 
-               ", &[&(slug.as_str())]
+                "DELETE TOP(1) FROM Comments WHERE Id = @P1;
+                SELECT 1; 
+               ", &[&(id.as_str())]
             ).for_each_row(|row| {
-                let slug : &str = row.get(0);
-                let title : &str = row.get(1);
-                let description : &str = row.get(2);
-                let body : &str = row.get(3);
-                let created_at : NaiveDateTime = row.get(4);
-                let updated_at : Option<chrono::NaiveDateTime> = row.get(5);
-                let user_name : &str = row.get(6);
-                let bio : Option<&str> = row.get(7);
-                let image :Option<&str> = row.get(8);
-                
-                let tag_list : Vec<String> = Vec::new();
-                let favorited : bool = true;
-                let favorites_count : i32 = 3;
-                let author = Profile{ username:user_name.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:false };
-                result = Some(Article{ 
-                    slug:slug.to_string(), title:title.to_string(), description:description.to_string(), body:body.to_string(), tagList:tag_list, createdAt:created_at, updatedAt:updated_at, favorited:favorited, favoritesCount:favorites_count, author:author
-                });
+                let _ : i32 = row.get(0);
                 Ok(())
             })
         );
