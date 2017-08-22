@@ -1609,7 +1609,7 @@ fn delete_comment_handler(mut req: Request, res: Response, c: Captures) {
     let caps = c.unwrap();
     let url_params = &caps[0];
     let slug = "aaa";
-    let id = "0".to_string();
+    let id = url_params.split("/").last().unwrap();
     println!("url_params: {}",url_params);
     println!("slug: {}", slug);
     println!("id: {}", id);
@@ -1621,7 +1621,7 @@ fn delete_comment_handler(mut req: Request, res: Response, c: Captures) {
             .and_then(|conn| conn.query(                            
                 "DELETE TOP(1) FROM Comments WHERE Id = @P1;
                 SELECT 1; 
-               ", &[&(id.as_str())]
+               ", &[&id]
             ).for_each_row(|row| {
                 let _ : i32 = row.get(0);
                 Ok(())
