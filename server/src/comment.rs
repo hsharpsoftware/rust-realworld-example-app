@@ -84,7 +84,7 @@ pub fn add_comment_handler(mut req: Request, res: Response, c: Captures) {
         let follow_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
                 "declare @id int; select top 1 @id = id from Articles where Slug = @p1 ORDER BY 1; 
-                insert into Comments (createdAt, body, ArticleId ) values (getdate(), @p3, @id);
+                insert into Comments (createdAt, body, ArticleId, Author ) values (getdate(), @p3, @id, @p2);
                 select Comments.Id, createdAt, body,  Users.UserName, Users.Bio, Users.[Image] 
                 from Comments, Users where Comments.Id = SCOPE_IDENTITY() and Users.Id = @p2
                 ", &[&(slug.as_str()), &logged_id, &(comment_body.as_str()) ]
@@ -213,16 +213,11 @@ pub fn get_comments_handler(mut req: Request, res: Response, c: Captures) {
 fn add_comment_test() {
     let client = Client::new();
 
-    let res = client.post("http://localhost:6767/api/users/login")
-        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
-        .send()
-        .unwrap();
-    assert_eq!(res.status, hyper::Ok);
-    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
-    let jwt = &token.0.token;
+    let (jwt, title) = login_create_article();
+    let url = format!("http://localhost:6767/api/articles/{}/comments", title);
 
-    let res = client.post("http://localhost:6767/api/articles/how-to-train-your-dragon/comments")
-        .header(Authorization(Bearer {token: jwt.to_owned()}))
+    let res = client.post(&url)
+        .header(Authorization(Bearer {token: jwt}))
         .body(r#"{"comment": {"body": "His name was my name too."}}"#)
         .send()
         .unwrap();
@@ -234,15 +229,10 @@ fn add_comment_test() {
 fn delete_comment_test() {
     let client = Client::new();
 
-    let res = client.post("http://localhost:6767/api/users/login")
-        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
-        .send()
-        .unwrap();
-    assert_eq!(res.status, hyper::Ok);
-    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
-    let jwt = &token.0.token;
+    let (jwt, title) = login_create_article();
+    let url = format!("http://localhost:6767/api/articles/{}/comments", title);
 
-    let mut res = client.post("http://localhost:6767/api/articles/how-to-train-your-dragon/comments")
+    let mut res = client.post(&url)
         .header(Authorization(Bearer {token: jwt.to_owned()}))
         .body(r#"{"comment": {"body": "His name was my name too."}}"#)
         .send()
@@ -255,8 +245,10 @@ fn delete_comment_test() {
     let comment_result : CommentResult = serde_json::from_str(&buffer).unwrap();
     println!("Comment result:{:?}", comment_result);
 
-    let mut res = client.delete(&(format!("http://localhost:6767/api/articles/how-to-train-your-dragon/comments/{}", comment_result.comment.id)))
-        .header(Authorization(Bearer {token: jwt.to_owned()}))
+    let url2 = format!("http://localhost:6767/api/articles/{}/comments/{}", title, comment_result.comment.id);
+
+    let mut res = client.delete(&url2)
+        .header(Authorization(Bearer {token: jwt}))
         .body(r#"{"comment": {"body": "His name was my name too."}}"#)
         .send()
         .unwrap();

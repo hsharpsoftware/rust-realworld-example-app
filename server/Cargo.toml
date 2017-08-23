@@ -21,6 +21,7 @@ reroute = "0.3.2"
 jwt="*"
 futures-state-stream = "*"
 slug = "*"
+rand = "0.3"
 
 [features]
 default = []

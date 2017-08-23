@@ -411,13 +411,18 @@ pub fn authentication_handler(mut req: Request, mut res: Response, _: Captures) 
 
 #[cfg(test)]
 use hyper::Client;
+#[cfg(test)]
+use user::rand::Rng;
 
 #[cfg(test)]
 pub fn register_jacob() -> (std::string::String, std::string::String) {
     let client = Client::new();
     let since = since_the_epoch();
-    let user_name = format!( "Jacob-{}", since );
-    let email = format!( "jake-{}@jake.jake", since );
+
+    let num = rand::thread_rng().gen_range(0, 1000);
+
+    let user_name = format!( "Jacob-{}-{}", since, num );
+    let email = format!( "jake-{}-{}@jake.jake", since, num );
     let body = format!(r#"{{"user":{{"username": "{}","email": "{}","password": "jakejake"}}}}"#, user_name, email); 
 
     let res = client.post("http://localhost:6767/api/users")
@@ -449,7 +454,8 @@ fn follow_jacob() -> (std::string::String, std::string::String) {
     let client = Client::new();
     let ( user_name, email ) = register_jacob();
     let jwt = login_jacob( email );
-    let url = format!(r#""http://localhost:6767/api/profiles/{}/follow"#, user_name);
+    let url = format!("http://localhost:6767/api/profiles/{}/follow", user_name);
+    println!("url:{}", url);
 
     let res = client.post(&url)
         .header(Authorization(Bearer {token: jwt.to_owned()}))
@@ -486,7 +492,7 @@ fn login_test() {
 fn profile_unlogged_test() {
     let client = Client::new();
     let ( user_name, email ) = register_jacob();
-    let url = format!(r#""http://localhost:6767/api/profiles/{}""#, user_name);
+    let url = format!("http://localhost:6767/api/profiles/{}", user_name);
 
     let mut res = client.get(&url)
         .send()
@@ -514,7 +520,8 @@ fn profile_logged_test() {
 
     let ( user_name, email ) = register_jacob();
     let jwt = login_jacob( email );
-    let url = format!(r#""http://localhost:6767/api/profiles/{}"#, user_name);
+    let url = format!("http://localhost:6767/api/profiles/{}", user_name);
+    let expected =  format!(r#"{{"username":"{}","bio":null,"image":null,"following":false}}"#, user_name);
 
     let mut res = client.get(&url)
         .header(Authorization(Bearer {token: jwt}))
@@ -522,7 +529,7 @@ fn profile_logged_test() {
         .unwrap();
     let mut buffer = String::new();
     res.read_to_string(&mut buffer).unwrap(); 
-    assert_eq!( buffer, r#"{"username":"Jacob","bio":null,"image":null,"following":false}"# );
+    assert_eq!( buffer, expected );
     assert_eq!(res.status, hyper::Ok);
 }
 
@@ -532,7 +539,7 @@ fn unfollow_test() {
     let client = Client::new();
 
     let (user_name, jwt) = follow_jacob();
-    let url = format!(r#""http://localhost:6767/api/profiles/{}/follow"#, user_name);
+    let url = format!("http://localhost:6767/api/profiles/{}/follow", user_name);
 
     let res = client.delete(&url)
         .header(Authorization(Bearer {token: jwt}))

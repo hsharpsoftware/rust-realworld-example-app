@@ -1,3 +1,5 @@
+cls
+
 set RUST_BACKTRACE=1
 
 IF EXIST "C:\Secrets\Conduit.toml" ( COPY C:\Secrets\Conduit.toml .\ )
