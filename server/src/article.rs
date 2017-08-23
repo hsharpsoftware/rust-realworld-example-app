@@ -651,16 +651,10 @@ fn unfavorite_article_test() {
 fn get_article_test() {
     let client = Client::new();
 
-    let res = client.post("http://localhost:6767/api/users/login")
-        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
-        .send()
-        .unwrap();
-    assert_eq!(res.status, hyper::Ok);
-    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
-    let jwt = &token.0.token;
+    let (jwt, title) = login_create_article();
+    let url = format!("http://localhost:6767/api/articles/{}", title);
 
-    let res = client.get("http://localhost:6767/api/articles/how-to-train-your-dragon")
-        .header(Authorization(Bearer {token: jwt.to_owned()}))
+    let res = client.get(&url)
         .body("")
         .send()
         .unwrap();
@@ -672,16 +666,9 @@ fn get_article_test() {
 fn list_article_test() {
     let client = Client::new();
 
-    let res = client.post("http://localhost:6767/api/users/login")
-        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
-        .send()
-        .unwrap();
-    assert_eq!(res.status, hyper::Ok);
-    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
-    let jwt = &token.0.token;
+    let (jwt, title) = login_create_article();
 
     let res = client.get("http://localhost:6767/api/articles?tag=dragons")
-        .header(Authorization(Bearer {token: jwt.to_owned()}))
         .body("")
         .send()
         .unwrap();
@@ -693,17 +680,14 @@ fn list_article_test() {
 fn update_article_test() {
     let client = Client::new();
 
-    let res = client.post("http://localhost:6767/api/users/login")
-        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
-        .send()
-        .unwrap();
-    assert_eq!(res.status, hyper::Ok);
-    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
-    let jwt = &token.0.token;
+    let (jwt, title) = login_create_article();
+    let url = format!("http://localhost:6767/api/articles/{}", title);
+    let title2 = title + " NOT";
+    let body = format!(r#"{{"article": {{"title": {},"description": "Ever wonder what mistakes you did?","body": "You have to believe he's not going to eat you."}}}}"#, title2);
 
-    let res = client.put("http://localhost:6767/api/articles/how-to-train-your-dragon")
-        .header(Authorization(Bearer {token: jwt.to_owned()}))
-        .body(r#"{"article": {"title": "How not to train your dragon","description": "Ever wonder what mistakes you did?","body": "You have to believe he's not going to eat you."}}"#)
+    let res = client.put(&url)
+        .header(Authorization(Bearer {token: jwt}))
+        .body(&body)
         .send()
         .unwrap();
     assert_eq!(res.status, hyper::Ok);
@@ -714,16 +698,11 @@ fn update_article_test() {
 fn delete_article_test() {
     let client = Client::new();
 
-    let res = client.post("http://localhost:6767/api/users/login")
-        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
-        .send()
-        .unwrap();
-    assert_eq!(res.status, hyper::Ok);
-    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
-    let jwt = &token.0.token;
+    let (jwt, title) = login_create_article();
+    let url = format!("http://localhost:6767/api/articles/{}", title);
 
-    let res = client.delete("http://localhost:6767/api/articles/how-to-train-your-dragon")
-        .header(Authorization(Bearer {token: jwt.to_owned()}))
+    let res = client.delete(&url)
+        .header(Authorization(Bearer {token: jwt}))
         .body("")
         .send()
         .unwrap();
