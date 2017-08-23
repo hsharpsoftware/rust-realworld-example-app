@@ -231,8 +231,7 @@ pub fn unfavorite_article_handler(mut req: Request, res: Response, c: Captures) 
             .and_then(|conn| conn.query(                            
                 "declare @id int; 
                 select TOP(1) @id = id from Articles where Slug = @P1 ORDER BY 1;
-                DELETE TOP(1) FROM Articles WHERE Id = @id;
-                select TOP(1) @id = id from Articles ORDER BY 1;
+                DELETE TOP(1) FROM FavoritedArticles WHERE ArticleId = @id AND UserId = @P2;
                 SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
                     INNER JOIN Users u ON a.Author = u.Id
                     where a.Id = @id
@@ -541,50 +540,36 @@ pub fn delete_article_handler(mut req: Request, res: Response, c: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);   
 
+    let token =  req.headers.get::<Authorization<Bearer>>(); 
+    let logged_id : i32 =  
+        match token {
+            Some(token) => {
+                let jwt = &token.0.token;
+                login(&jwt).unwrap()
+
+            }
+            _ => 0
+        };
+
     let caps = c.unwrap();
     let slug = &caps[0].replace("/api/articles/", "");
     println!("slug: {}", slug);
 
-    let mut result : Option<Article> = None; 
-    {
-        let mut sql = Core::new().unwrap();
-        let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-            .and_then(|conn| conn.query(                            
-                "DELETE TOP(1) FROM Articles WHERE slug = @P1;
-                SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
-INNER JOIN Users u ON a.Author = u.Id
-where Slug = @P1; 
-               ", &[&(slug.as_str())]
-            ).for_each_row(|row| {
-                let slug : &str = row.get(0);
-                let title : &str = row.get(1);
-                let description : &str = row.get(2);
-                let body : &str = row.get(3);
-                let created_at : NaiveDateTime = row.get(4);
-                let updated_at : Option<chrono::NaiveDateTime> = row.get(5);
-                let user_name : &str = row.get(6);
-                let bio : Option<&str> = row.get(7);
-                let image :Option<&str> = row.get(8);
-                
-                let tag_list : Vec<String> = Vec::new();
-                let favorited : bool = true;
-                let favorites_count : i32 = 3;
-                let author = Profile{ username:user_name.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:false };
-                result = Some(Article{ 
-                    slug:slug.to_string(), title:title.to_string(), description:description.to_string(), body:body.to_string(), tagList:tag_list, createdAt:created_at, updatedAt:updated_at, favorited:favorited, favoritesCount:favorites_count, author:author
-                });
-                Ok(())
-            })
-        );
-        sql.run(get_cmd).unwrap(); 
-    }
-
-    if result.is_some() {
-        let result = result.unwrap();
-        let result = serde_json::to_string(&result).unwrap();
-        let result : &[u8] = result.as_bytes();
-        res.send(&result).unwrap();                        
-    }   
+    let mut sql = Core::new().unwrap();
+    let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+        .and_then(|conn| conn.query(                            
+            "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1 AND Author = @P2 ORDER BY 1; 
+            DELETE FROM Comments WHERE ArticleId = @id;
+            DELETE FROM FavoritedArticles WHERE ArticleId = @id;
+            DELETE FROM ArticleTags WHERE ArticleId = @id;
+            DELETE FROM Articles WHERE id = @id AND Author = @P2;
+            SELECT 1; 
+            ", &[&(slug.as_str()),&(logged_id)]
+        ).for_each_row(|row| {
+            Ok(())
+        })
+    );
+    sql.run(get_cmd).unwrap(); 
 }
 
 #[cfg(test)]
