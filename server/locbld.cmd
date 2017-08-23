@@ -13,4 +13,4 @@ if errorlevel 1 (
   exit /b %errorlevel%
 )
 taskkill /F /IM server.exe
-IF DEFINED %APPVEYOR% ( taskkill /F /IM cmd.exe )
+exit 0

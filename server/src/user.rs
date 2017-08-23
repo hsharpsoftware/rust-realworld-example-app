@@ -131,6 +131,39 @@ pub fn register_jacob() -> (std::string::String, std::string::String) {
 }
 
 #[cfg(test)]
+pub fn login_jacob( email : std::string::String ) -> std::string::String {
+    let client = Client::new();
+
+    let body = format!(r#"{{"user":{{"email": "{}","password": "jakejake"}}}}"#, email);
+
+    let res = client.post("http://localhost:6767/api/users/login")
+        .body(&body)
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
+    let jwt = &token.0.token;
+    jwt.to_owned()
+}
+
+#[cfg(test)]
+fn follow_jacob() -> (std::string::String, std::string::String) {
+    let client = Client::new();
+    let ( user_name, email ) = register_jacob();
+    let jwt = login_jacob( email );
+    let url = format!(r#""http://localhost:6767/api/profiles/{}/follow"#, user_name);
+
+    let res = client.post(&url)
+        .header(Authorization(Bearer {token: jwt.to_owned()}))
+        .body("")
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+
+    (user_name, jwt)
+}
+
+#[cfg(test)]
 #[test]
 fn registration_test() {
     register_jacob();
@@ -145,6 +178,67 @@ fn login_test() {
 
     let res = client.post("http://localhost:6767/api/users/login")
         .body(&body)
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+}
+
+#[cfg(test)]
+#[test]
+fn profile_unlogged_test() {
+    let client = Client::new();
+    let ( user_name, email ) = register_jacob();
+    let url = format!(r#""http://localhost:6767/api/profiles/{}""#, user_name);
+
+    let mut res = client.get(&url)
+        .send()
+        .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+
+    let body = format!(r#"{{"username":"{}","bio":null,"image":null,"following":false}}"#, user_name);
+
+    assert_eq!( buffer, body );
+    assert_eq!(res.status, hyper::Ok);
+}
+
+#[cfg(test)]
+#[test]
+fn follow_test() {
+    follow_jacob();
+}
+
+
+#[cfg(test)]
+#[test]
+fn profile_logged_test() {
+    let client = Client::new();
+
+    let ( user_name, email ) = register_jacob();
+    let jwt = login_jacob( email );
+    let url = format!(r#""http://localhost:6767/api/profiles/{}"#, user_name);
+
+    let mut res = client.get(&url)
+        .header(Authorization(Bearer {token: jwt}))
+        .send()
+        .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+    assert_eq!( buffer, r#"{"username":"Jacob","bio":null,"image":null,"following":false}"# );
+    assert_eq!(res.status, hyper::Ok);
+}
+
+#[cfg(test)]
+#[test]
+fn unfollow_test() {
+    let client = Client::new();
+
+    let (user_name, jwt) = follow_jacob();
+    let url = format!(r#""http://localhost:6767/api/profiles/{}/follow"#, user_name);
+
+    let res = client.delete(&url)
+        .header(Authorization(Bearer {token: jwt}))
+        .body("")
         .send()
         .unwrap();
     assert_eq!(res.status, hyper::Ok);
