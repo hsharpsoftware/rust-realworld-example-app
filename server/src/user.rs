@@ -111,6 +111,304 @@ pub fn registration_handler(mut req: Request, _: Response, _: Captures) {
      lp.run(future).unwrap();
 }
 
+pub fn update_user_handler(mut req: Request, res: Response, _: Captures) {
+    let mut body = String::new();
+    let _ = req.read_to_string(&mut body);    
+    let token =  req.headers.get::<Authorization<Bearer>>(); 
+    let mut result : Option<User> = None; 
+    match token {
+        Some(token) => {
+            let jwt = &token.0.token;
+            let logged_in_user_id = login(&jwt);  
+
+            match logged_in_user_id {
+                Some(logged_in_user_id) => {
+                    println!("logged_in_user {}", &logged_in_user_id);
+
+                    let update_user : UpdateUser = serde_json::from_str(&body).unwrap();     
+                    let user_name : &str = &update_user.user.username;
+                    let bio : &str = update_user.user.bio.as_ref().map(|x| &**x).unwrap_or("");
+                    let image : &str = update_user.user.image.as_ref().map(|x| &**x).unwrap_or("");
+                    let email : &str = &update_user.user.email;
+
+                    let mut sql = Core::new().unwrap();
+                    let update_user_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+                        .and_then(|conn| { conn.query(                            
+                            "UPDATE [dbo].[Users] SET [UserName]=@P2,[Bio]=@P3,[Image]=@P4, [Email] = @P5 WHERE [Id] = @P1; SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users] WHERE [Id] = @P1", 
+                            &[&logged_in_user_id, &user_name, &bio, &image, &email]
+                            )
+                            .for_each_row(|row| {
+                                let email : &str = row.get(0);
+                                let token : &str = row.get(1);
+                                let user_name : &str = row.get(2);
+                                let bio : Option<&str> = row.get(3);
+                                let image : Option<&str> = row.get(4);
+                                result = Some(User{ 
+                                    email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
+                                    image:image.map(|s| s.to_string()), username:user_name.to_string()
+                                });
+                                Ok(())
+                            })
+                        }
+                    );
+                    sql.run(update_user_cmd).unwrap(); 
+                },
+                _ => {
+                }
+            }
+        }
+        _ => {
+
+        }
+    }
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }      
+}
+
+pub fn get_current_user_handler(req: Request, res: Response, _: Captures) {
+    let token = req.headers.get::<Authorization<Bearer>>(); 
+    let mut result : Option<User> = None; 
+    match token {
+        Some(token) => {
+            let jwt = &token.0.token;
+            let logged_in_user = login(&jwt);  
+
+            match logged_in_user {
+                Some(logged_in_user) => {
+                    println!("logged_in_user {}", &logged_in_user);
+                    let mut sql = Core::new().unwrap();
+                    let get_user = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+                        .and_then(|conn| conn.query(                            
+                            "SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users]
+                                WHERE [Id] = @P1", &[&logged_in_user]
+                        ).for_each_row(|row| {
+                            let email : &str = row.get(0);
+                            let token : &str = row.get(1);
+                            let user_name : &str = row.get(2);
+                            let bio : Option<&str> = row.get(3);
+                            let image : Option<&str> = row.get(4);
+                            result = Some(User{ 
+                                email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
+                                image:image.map(|s| s.to_string()), username:user_name.to_string()
+                            });
+                            Ok(())
+                        })
+                    );
+                    sql.run(get_user).unwrap(); 
+                },
+                _ => {
+                }
+            }
+        }
+        _ => {
+
+        }
+    }
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }    
+}
+
+pub fn get_profile_handler(req: Request, res: Response, c: Captures) {
+    let token = req.headers.get::<Authorization<Bearer>>(); 
+    let logged_id : i32 =  
+        match token {
+            Some(token) => {
+                let jwt = &token.0.token;
+                login(&jwt).unwrap()
+
+            }
+            _ => 0
+        };
+
+    let caps = c.unwrap();
+    let profile = &caps[0].replace("/api/profiles/", "");
+    println!("profile: {}", profile);
+    let mut result : Option<Profile> = None; 
+
+    {
+        let mut sql = Core::new().unwrap();
+        let get_profile_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+            .and_then(|conn| conn.query(                            
+                "SELECT [Email],[Token],[UserName],[Bio],[Image] ,
+( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @P2 ) as Following
+FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
+            ).for_each_row(|row| {
+                let _ : &str = row.get(0);
+                let _ : &str = row.get(1);
+                let user_name : &str = row.get(2);
+                let bio : Option<&str> = row.get(3);
+                let image : Option<&str> = row.get(4);
+                let f : i32 = row.get(5);
+                let following : bool = f == 1;
+                result = Some(Profile{ 
+                    following:following, bio:bio.map(|s| s.to_string()),
+                    image:image.map(|s| s.to_string()), username:user_name.to_string()
+                });
+                Ok(())
+            })
+        );
+        sql.run(get_profile_cmd).unwrap(); 
+    }
+
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }   
+}
+
+pub fn unfollow_handler(req: Request, res: Response, c: Captures) {
+    let token = req.headers.get::<Authorization<Bearer>>(); 
+    let logged_id : i32 =  
+        match token {
+            Some(token) => {
+                let jwt = &token.0.token;
+                login(&jwt).unwrap()
+
+            }
+            _ => 0
+        };
+
+    let caps = c.unwrap();
+    let profile = &caps[0].replace("/api/profiles/", "").replace("/follow", "");
+    let mut result : Option<Profile> = None; 
+
+    {
+        let mut sql = Core::new().unwrap();
+        let delete_user = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+            .and_then(|conn| conn.query(                            
+                "DELETE TOP (1) from [dbo].[Followings] WHERE [FollowerId] = @P2;
+                SELECT TOP (1) [Email],[Token],[UserName],[Bio],[Image] ,
+( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @P2 ) as Following
+FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
+            )
+            .for_each_row(|row| {
+                let _ : &str = row.get(0);
+                let _ : &str = row.get(1);
+                let user_name : &str = row.get(2);
+                let bio : Option<&str> = row.get(3);
+                let image : Option<&str> = row.get(4);
+                let f : i32 = row.get(5);
+                let following : bool = f == 1;
+                result = Some(Profile{ 
+                    following:following, bio:bio.map(|s| s.to_string()),
+                    image:image.map(|s| s.to_string()), username:user_name.to_string()
+                });
+                Ok(())
+            })
+        );
+        sql.run(delete_user).unwrap(); 
+    }
+
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }   
+}
+
+pub fn follow_handler(req: Request, res: Response, c: Captures) {
+    let token = req.headers.get::<Authorization<Bearer>>(); 
+    let logged_id : i32 =  
+        match token {
+            Some(token) => {
+                let jwt = &token.0.token;
+                login(&jwt).unwrap()
+
+            }
+            _ => 0
+        };
+
+    let caps = c.unwrap();
+    let profile = &caps[0].replace("/api/profiles/", "").replace("/follow", "");
+    println!("profile: {}", profile);
+    let mut result : Option<Profile> = None; 
+
+    {
+        let mut sql = Core::new().unwrap();
+        let follow_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+            .and_then(|conn| conn.query(                            
+                "INSERT INTO [dbo].[Followings] ([FollowingId] ,[FollowerId])
+     SELECT @P2,(SELECT TOP (1) [Id]  FROM [Users] where UserName = @P1) EXCEPT SELECT [FollowingId] ,[FollowerId] from Followings;
+                SELECT TOP 1 [Email],[Token],[UserName],[Bio],[Image] ,
+( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @P2 ) as Following
+FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
+            ).for_each_row(|row| {
+                let _ : &str = row.get(0);
+                let _ : &str = row.get(1);
+                let user_name : &str = row.get(2);
+                let bio : Option<&str> = row.get(3);
+                let image : Option<&str> = row.get(4);
+                let f : i32 = row.get(5);
+                let following : bool = f == 1;
+                result = Some(Profile{ 
+                    following:following, bio:bio.map(|s| s.to_string()),
+                    image:image.map(|s| s.to_string()), username:user_name.to_string()
+                });
+                Ok(())
+            })
+        );
+        sql.run(follow_cmd).unwrap(); 
+    }
+
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }   
+}
+
+
+pub fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
+    let mut body = String::new();
+    let _ = req.read_to_string(&mut body);    
+    let login : Login = serde_json::from_str(&body).unwrap();    
+
+    let mut sql = Core::new().unwrap();
+    let email : &str = &login.user.email;
+    let get_user_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+        .and_then(|conn| conn.query( "SELECT TOP 1 [Token], [Id] FROM [dbo].[Users] WHERE [Email] = @P1", &[&email] )
+        .for_each_row(|row| {
+            let stored_hash : &str = row.get(0);
+            let user_id : i32 = row.get(1);
+            let authenticated_user = crypto::pbkdf2::pbkdf2_check( &login.user.password, stored_hash);
+            *res.status_mut() = StatusCode::Unauthorized;
+
+            match authenticated_user {
+                Ok(valid) => {
+                    if valid {                     
+                        let token = new_token(user_id.to_string().as_ref(), &login.user.password).unwrap();
+
+                        res.headers_mut().set(
+                            Authorization(
+                                Bearer {
+                                    token: token.to_owned()
+                                }
+                            )
+                        );
+                        *res.status_mut() = StatusCode::Ok;
+                    }
+                }
+                _ => {}
+            }            
+            Ok(())
+        })
+    );
+    sql.run(get_user_cmd).unwrap(); 
+}
+
+
 #[cfg(test)]
 use hyper::Client;
 
