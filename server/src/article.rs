@@ -327,7 +327,7 @@ pub fn list_article_handler(mut req: Request, res: Response, c: Captures) {
 
     let sql_command: Statement = Statement::from(select_clause);
 
-    let mut result : Option<Article> = None; 
+    let mut result : Vec<Article> = Vec::new(); 
     {
         let mut sql = Core::new().unwrap();
         let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
@@ -347,17 +347,18 @@ pub fn list_article_handler(mut req: Request, res: Response, c: Captures) {
                 let favorited : bool = true;
                 let favorites_count : i32 = 3;
                 let author = Profile{ username:user_name.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:false };
-                result = Some(Article{ 
+                let art = Article{ 
                     slug:slug.to_string(), title:title.to_string(), description:description.to_string(), body:body.to_string(), tagList:tag_list, createdAt:created_at, updatedAt:updated_at, favorited:favorited, favoritesCount:favorites_count, author:author
-                });
+                };
+                result.push(art);
                 Ok(())
             })
         );
         sql.run(get_cmd).unwrap(); 
     }
 
-    if result.is_some() {
-        let result = result.unwrap();
+    if result.len() > 0 {
+        //let result = result.unwrap();
         let result = serde_json::to_string(&result).unwrap();
         let result : &[u8] = result.as_bytes();
         res.send(&result).unwrap();                        
