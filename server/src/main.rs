@@ -59,6 +59,9 @@ use jwt::{
 
 use slug::slugify;
 
+#[cfg(test)]
+use hyper::Client;
+
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
 struct User {
@@ -149,7 +152,7 @@ struct RegistrationDetails {
 }
 
 #[derive(Serialize, Deserialize)]
-struct Registration {
+pub struct Registration {
     user : RegistrationDetails
 }
 
@@ -282,92 +285,14 @@ fn get_database_config() -> DatabaseConfig {
     database_config
 }
 
-fn new_token(user_id: &str, _: &str) -> Option<String> {
-    let header: jwt::Header = Default::default();
-    let claims = jwt::Registered {
-        iss: Some("mikkyang.com".into()),
-        sub: Some(user_id.into()),
-        ..Default::default()
-    };
-    let token = Token::new(header, claims);
-
-    token.signed(b"secret_key", Sha256::new()).ok()
-}
-
-fn login(token: &str) -> Option<i32> {
-    let token = Token::<Header, Registered>::parse(token).unwrap();
-
-    if token.verify(b"secret_key", Sha256::new()) {
-        match token.claims.sub {
-            Some(token) => 
-                match token.parse::<i32>() {
-                    Ok(result) => Some(result),
-                    Err(_) => None
-                }
-            ,_ => None
-        }    
-        
-        
-    } else {
-        None
-    }
-}
+mod user;
+use user::*;
  
 fn handle_row_no_value(_: tiberius::query::QueryRow) -> tiberius::TdsResult<()> {
     Ok(())
 }
 
-fn registration_handler(mut req: Request, _: Response, _: Captures) {
-    let mut body = String::new();
-    let _ = req.read_to_string(&mut body);    
-    let registration : Registration = serde_json::from_str(&body).unwrap();     
 
-    let email : &str = &registration.user.email;
-    let token : &str = &crypto::pbkdf2::pbkdf2_simple(&registration.user.password, 10000).unwrap();
-    let username : &str = &registration.user.username;
-
-    let mut lp = Core::new().unwrap();
-    let future = SqlConnection::connect(lp.handle(), CONNECTION_STRING.as_str())
-    .and_then(|conn| {
-        conn.query( "
-        INSERT INTO [dbo].[Users]
-            ([Email]
-            ,[Token]
-            ,[UserName])
-        VALUES
-            (@P1
-            ,@P2
-            ,@P3); SELECT SCOPE_IDENTITY()" , &[ &email, &token, &username]  ).for_each_row( handle_row_no_value )
-    } );
-     lp.run(future).unwrap();
-}
-
-#[cfg(test)]
-use hyper::Client;
-
-#[cfg(test)]
-#[test]
-fn registration_test() {
-    let client = Client::new();
-
-    let res = client.post("http://localhost:6767/api/users")
-        .body(r#"{"user":{"username": "Jacob","email": "jake@jake.jake","password": "jakejake"}}"#)
-        .send()
-        .unwrap();
-    assert_eq!(res.status, hyper::Ok);
-}
-
-#[cfg(test)]
-#[test]
-fn login_test() {
-    let client = Client::new();
-
-    let res = client.post("http://localhost:6767/api/users/login")
-        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
-        .send()
-        .unwrap();
-    assert_eq!(res.status, hyper::Ok);
-}
 
 #[cfg(test)]
 #[test]
