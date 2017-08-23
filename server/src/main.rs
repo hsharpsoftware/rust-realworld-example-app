@@ -30,6 +30,8 @@ extern crate futures_state_stream;
 
 extern crate slug;
 
+extern crate rand;
+
 use futures::Future;
 use tokio_core::reactor::Core;
 use tiberius::{SqlConnection};

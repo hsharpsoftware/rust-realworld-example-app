@@ -411,13 +411,18 @@ pub fn authentication_handler(mut req: Request, mut res: Response, _: Captures) 
 
 #[cfg(test)]
 use hyper::Client;
+#[cfg(test)]
+use user::rand::Rng;
 
 #[cfg(test)]
 pub fn register_jacob() -> (std::string::String, std::string::String) {
     let client = Client::new();
     let since = since_the_epoch();
-    let user_name = format!( "Jacob-{}", since );
-    let email = format!( "jake-{}@jake.jake", since );
+
+    let num = rand::thread_rng().gen_range(0, 1000);
+
+    let user_name = format!( "Jacob-{}-{}", since, num );
+    let email = format!( "jake-{}-{}@jake.jake", since, num );
     let body = format!(r#"{{"user":{{"username": "{}","email": "{}","password": "jakejake"}}}}"#, user_name, email); 
 
     let res = client.post("http://localhost:6767/api/users")

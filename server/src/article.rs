@@ -415,7 +415,7 @@ pub fn update_article_handler(mut req: Request, res: Response, c: Captures) {
 
     let caps = c.unwrap();
     let slug = &caps[0].replace("/api/articles/", "");
-
+    println!("slug {}", &slug);
 
     match token {
         Some(token) => {
@@ -425,6 +425,7 @@ pub fn update_article_handler(mut req: Request, res: Response, c: Captures) {
             match logged_in_user_id {
                 Some(logged_in_user_id) => {
                     println!("logged_in_user {}", &logged_in_user_id);
+                    println!("body {}", &body);
 
                     let update_article : UpdateArticle = serde_json::from_str(&body).unwrap();     
                     let title : Option<String> = update_article.title;
@@ -587,14 +588,19 @@ where Slug = @P1;
 }
 
 #[cfg(test)]
-fn login_create_article() -> (std::string::String, std::string::String) {
+use rand::Rng;
+
+#[cfg(test)]
+pub fn login_create_article() -> (std::string::String, std::string::String) {
     let client = Client::new();
 
     let ( user_name, email ) = register_jacob();
     let jwt = login_jacob( email );    
 
     let since = since_the_epoch();
-    let title = format!( "How to train your dragon {}", since );    
+    let num = rand::thread_rng().gen_range(0, 1000);    
+    let title = format!( "How to train your dragon {}-{}", since, num );   
+    let slug : &str = &slugify(title.to_owned());
 
     let body = format!( r#"{{"article": {{"title": "{}","description": "Ever wonder how?","body": "You have to believe",
                 "tagList": ["reactjs", "angularjs", "dragons"]}}}}"#, title);    
@@ -605,7 +611,7 @@ fn login_create_article() -> (std::string::String, std::string::String) {
         .send()
         .unwrap();
     assert_eq!(res.status, hyper::Ok);
-    (jwt, title)
+    (jwt, slug.to_string())
 }
 
 #[cfg(test)]
@@ -683,7 +689,7 @@ fn update_article_test() {
     let (jwt, title) = login_create_article();
     let url = format!("http://localhost:6767/api/articles/{}", title);
     let title2 = title + " NOT";
-    let body = format!(r#"{{"article": {{"title": {},"description": "Ever wonder what mistakes you did?","body": "You have to believe he's not going to eat you."}}}}"#, title2);
+    let body = format!(r#"{{"article": {{"title": "{}","description": "Ever wonder what mistakes you did?","body": "You have to believe he's not going to eat you."}}}}"#, title2);
 
     let res = client.put(&url)
         .header(Authorization(Bearer {token: jwt}))
