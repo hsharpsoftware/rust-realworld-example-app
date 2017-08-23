@@ -281,6 +281,7 @@ pub fn list_article_handler(mut req: Request, res: Response, c: Captures) {
     let mut where_clause = String::new();
 
     let mut limit = "20";
+    let mut offset = "0";
 
     for param in &parsed_params {
         let name_value: Vec<&str> = param.split('=').collect();
@@ -312,16 +313,23 @@ pub fn list_article_handler(mut req: Request, res: Response, c: Captures) {
             where_clause.push_str(name_value[1]);
             where_clause.push_str("'");
         }
-        else if name_value[0] == "favorited" {
+        else if name_value[0] == "offset" {
+            offset = name_value[1];
+        }
+        else if name_value[0] == "limit" {
             limit = name_value[1];
         }
         ;
     }
 
-    let mut select_clause = String::from("SELECT TOP ");
-    select_clause.push_str(limit);
-    select_clause.push_str(" Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a ");
+    let mut select_clause = String::from("SELECT Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a ");
     select_clause.push_str(&where_clause);
+    select_clause.push_str("order by a.Id ASC OFFSET ");
+    select_clause.push_str(&offset);
+    select_clause.push_str("  ROWS ");
+    select_clause.push_str("FETCH NEXT ");
+    select_clause.push_str(&limit);
+    select_clause.push_str(" ROWS ONLY");
 
     println!("select_clause: {}", select_clause);
 
