@@ -1,3 +1,5 @@
+cls
+
 set RUST_BACKTRACE=1
 
 IF EXIST "C:\Secrets\Conduit.toml" ( COPY C:\Secrets\Conduit.toml .\ )
@@ -13,5 +15,4 @@ if errorlevel 1 (
   exit /b %errorlevel%
 )
 taskkill /F /IM server.exe
-taskkill /F /IM cmd.exe
 exit 0
