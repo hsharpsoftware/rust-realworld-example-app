@@ -169,15 +169,15 @@ pub fn get_comments_handler(mut req: Request, res: Response, c: Captures) {
     println!("slug: {}", slug);
 
     let mut result : Option<CommentsResult> = None; 
+    let mut comments : Vec<Comment>  = Vec::new();
 
     {
         let mut sql = Core::new().unwrap();
         let follow_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
                 "declare @id int; select top 1 @id = id from Articles where Slug = @p1 ORDER BY 1; 
-                insert into Comments (createdAt, body, ArticleId ) values (getdate(), @p3, @id);
                 select Comments.Id, createdAt, body,  Users.UserName, Users.Bio, Users.[Image] 
-                from Comments, Users where Comments.Id = SCOPE_IDENTITY() and Users.Id = @p2
+                from Comments inner join Users ON Users.Id = Comments.Author where ArticleId = @id
                 ", &[&(slug.as_str()), &logged_id ]
             ).for_each_row(|row| {
                 let id : i32 = row.get(0);
@@ -191,12 +191,14 @@ pub fn get_comments_handler(mut req: Request, res: Response, c: Captures) {
                     id:id, createdAt:created_at, updatedAt:created_at,
                     body:body.to_string(), author: profile
                 };
-                if result.is_none() { result = Some(CommentsResult{comments:Vec::new()}); }
+                comments.push(comment);
                 Ok(())
             })
         );
         sql.run(follow_cmd).unwrap(); 
     }
+    	
+    result = Some(CommentsResult{comments:comments});
 
     if result.is_some() {
         let result = result.unwrap();
