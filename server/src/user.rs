@@ -115,24 +115,36 @@ pub fn registration_handler(mut req: Request, _: Response, _: Captures) {
 use hyper::Client;
 
 #[cfg(test)]
-#[test]
-fn registration_test() {
+pub fn register_jacob() -> (std::string::String, std::string::String) {
     let client = Client::new();
+    let since = since_the_epoch();
+    let user_name = format!( "Jacob-{}", since );
+    let email = format!( "jake-{}@jake.jake", since );
+    let body = format!(r#"{{"user":{{"username": "{}","email": "{}","password": "jakejake"}}}}"#, user_name, email); 
 
     let res = client.post("http://localhost:6767/api/users")
-        .body(r#"{"user":{"username": "Jacob","email": "jake@jake.jake","password": "jakejake"}}"#)
+        .body(&body)
         .send()
         .unwrap();
-    assert_eq!(res.status, hyper::Ok);
+    assert_eq!(res.status, hyper::Ok);  
+    ( user_name, email )
+}
+
+#[cfg(test)]
+#[test]
+fn registration_test() {
+    register_jacob();
 }
 
 #[cfg(test)]
 #[test]
 fn login_test() {
     let client = Client::new();
+    let ( user_name, email ) = register_jacob();
+    let body = format!(r#"{{"user":{{"email": "{}","password": "jakejake"}}}}"#, email);
 
     let res = client.post("http://localhost:6767/api/users/login")
-        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
+        .body(&body)
         .send()
         .unwrap();
     assert_eq!(res.status, hyper::Ok);
