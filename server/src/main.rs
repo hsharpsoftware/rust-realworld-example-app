@@ -122,6 +122,14 @@ struct CommentResult {
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
+#[allow(non_snake_case)]
+struct CommentsResult {
+    comments: Vec<Comment>,
+}
+
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
 struct InternalError {
     errors : ErrorDetail
 }
@@ -1640,6 +1648,60 @@ fn delete_comment_handler(mut req: Request, res: Response, c: Captures) {
     }   
 }
 
+fn get_comments_handler(mut req: Request, res: Response, c: Captures) {    
+    let token =  req.headers.get::<Authorization<Bearer>>(); 
+    let logged_id : i32 =  
+        match token {
+            Some(token) => {
+                let jwt = &token.0.token;
+                login(&jwt).unwrap()
+
+            }
+            _ => 0
+        };
+
+    let caps = c.unwrap();
+    let slug = &caps[0].replace("/api/articles/", "").replace("/comments", "");
+    println!("slug: {}", slug);
+
+    let mut result : Option<CommentsResult> = None; 
+
+    {
+        let mut sql = Core::new().unwrap();
+        let follow_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+            .and_then(|conn| conn.query(                            
+                "declare @id int; select top 1 @id = id from Articles where Slug = @p1 ORDER BY 1; 
+                insert into Comments (createdAt, body, ArticleId ) values (getdate(), @p3, @id);
+                select Comments.Id, createdAt, body,  Users.UserName, Users.Bio, Users.[Image] 
+                from Comments, Users where Comments.Id = SCOPE_IDENTITY() and Users.Id = @p2
+                ", &[&(slug.as_str()), &logged_id ]
+            ).for_each_row(|row| {
+                let id : i32 = row.get(0);
+                let created_at : NaiveDateTime = row.get(1);
+                let body : &str = row.get(2);
+                let user_name : &str = row.get(3);
+                let bio : Option<&str> = row.get(4);
+                let image : Option<&str> = row.get(5);
+                let profile = Profile{ username:user_name.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:false };
+                let comment = Comment{ 
+                    id:id, createdAt:created_at, updatedAt:created_at,
+                    body:body.to_string(), author: profile
+                };
+                if result.is_none() { result = Some(CommentsResult{comments:Vec::new()}); }
+                Ok(())
+            })
+        );
+        sql.run(follow_cmd).unwrap(); 
+    }
+
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }   
+}
+
 fn main() {    
     let port = iis::get_port();
 
@@ -1670,6 +1732,7 @@ fn main() {
     builder.get(r"/api/articles?.*", list_article_handler); 
     builder.delete(r"/api/articles/.*/comments/.*", delete_comment_handler);  
     builder.delete(r"/api/articles/.*", delete_article_handler);  
+    builder.get(r"/api/articles/.*/comments/.*", get_comments_handler);  
 
     let router = builder.finalize().unwrap(); 
 
