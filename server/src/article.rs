@@ -587,25 +587,31 @@ where Slug = @P1;
 }
 
 #[cfg(test)]
-#[test]
-fn create_article_test() {
+fn login_create_article() -> (std::string::String, std::string::String) {
     let client = Client::new();
 
-    let res = client.post("http://localhost:6767/api/users/login")
-        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
-        .send()
-        .unwrap();
-    assert_eq!(res.status, hyper::Ok);
-    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
-    let jwt = &token.0.token;
+    let ( user_name, email ) = register_jacob();
+    let jwt = login_jacob( email );    
+
+    let since = since_the_epoch();
+    let title = format!( "How to train your dragon {}", since );    
+
+    let body = format!( r#"{{"article": {{"title": "{}","description": "Ever wonder how?","body": "You have to believe",
+                "tagList": ["reactjs", "angularjs", "dragons"]}}}}"#, title);    
 
     let res = client.post("http://localhost:6767/api/articles")
         .header(Authorization(Bearer {token: jwt.to_owned()}))
-        .body(r#"{"article": {"title": "How to train your dragon","description": "Ever wonder how?","body": "You have to believe",
-                "tagList": ["reactjs", "angularjs", "dragons"]}}"#)
+        .body(&body)
         .send()
         .unwrap();
     assert_eq!(res.status, hyper::Ok);
+    (jwt, title)
+}
+
+#[cfg(test)]
+#[test]
+fn create_article_test() {
+    login_create_article();
 }
 
 #[cfg(test)]
@@ -613,16 +619,11 @@ fn create_article_test() {
 fn favorite_article_test() {
     let client = Client::new();
 
-    let res = client.post("http://localhost:6767/api/users/login")
-        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
-        .send()
-        .unwrap();
-    assert_eq!(res.status, hyper::Ok);
-    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
-    let jwt = &token.0.token;
+    let (jwt, title) = login_create_article();
+    let url = format!("http://localhost:6767/api/articles/{}/favorite", title);
 
-    let res = client.post("http://localhost:6767/api/articles/how-to-train-your-dragon/favorite")
-        .header(Authorization(Bearer {token: jwt.to_owned()}))
+    let res = client.post(&url)
+        .header(Authorization(Bearer {token: jwt}))
         .body("")
         .send()
         .unwrap();
@@ -634,16 +635,11 @@ fn favorite_article_test() {
 fn unfavorite_article_test() {
     let client = Client::new();
 
-    let res = client.post("http://localhost:6767/api/users/login")
-        .body(r#"{"user":{"email": "jake@jake.jake","password": "jakejake"}}"#)
-        .send()
-        .unwrap();
-    assert_eq!(res.status, hyper::Ok);
-    let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
-    let jwt = &token.0.token;
+    let (jwt, title) = login_create_article();
+    let url = format!("http://localhost:6767/api/articles/{}/favorite", title);
 
-    let res = client.delete("http://localhost:6767/api/articles/how-to-train-your-dragon/favorite")
-        .header(Authorization(Bearer {token: jwt.to_owned()}))
+    let res = client.delete(&url)
+        .header(Authorization(Bearer {token: jwt}))
         .body("")
         .send()
         .unwrap();
