@@ -596,7 +596,7 @@ pub fn login_create_article() -> (std::string::String, std::string::String) {
     let client = Client::new();
 
     let ( user_name, email ) = register_jacob();
-    let jwt = login_jacob( email );    
+    let jwt = login_jacob( email, user::JACOB_PASSWORD.to_string() );    
 
     let since = since_the_epoch();
     let num = rand::thread_rng().gen_range(0, 1000);    

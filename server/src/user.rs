@@ -86,17 +86,18 @@ pub fn login(token: &str) -> Option<i32> {
     }
 }
 
-fn get_user_from_row( row : tiberius::query::QueryRow ) -> Option<UserResult> {
+fn get_user_from_row( row : tiberius::query::QueryRow ) -> (i32, String, Option<UserResult> ) {
     let email : &str = row.get(0);
     let token : &str = row.get(1);
     let user_name : &str = row.get(2);
     let bio : Option<&str> = row.get(3);
     let image : Option<&str> = row.get(4);
+    let user_id : i32 = row.get(5);
     let result = Some(UserResult{user:User{ 
         email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
         image:image.map(|s| s.to_string()), username:user_name.to_string()
     }});
-    result    
+    (user_id, token.to_string(), result)
 }
 
 pub fn registration_handler(mut req: Request, res: Response, _: Captures) {
@@ -121,9 +122,10 @@ pub fn registration_handler(mut req: Request, res: Response, _: Captures) {
             VALUES
                 (@P1
                 ,@P2
-                ,@P3); ; SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users] WHERE [Id] = SCOPE_IDENTITY()" , &[ &email, &token, &username]  )
+                ,@P3); ; SELECT [Email],[Token],[UserName],[Bio],[Image], Id FROM [dbo].[Users] WHERE [Id] = SCOPE_IDENTITY()" , &[ &email, &token, &username]  )
             .for_each_row( |row| {
-                                    result = get_user_from_row(row);
+                                    let (_,_,result2) = get_user_from_row(row);
+                                    result = result2;
                                     Ok(())
                 }            
             )
@@ -143,7 +145,7 @@ pub fn update_user_handler(mut req: Request, res: Response, _: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
     let token =  req.headers.get::<Authorization<Bearer>>(); 
-    let mut result : Option<User> = None; 
+    let mut result : Option<UserResult> = None; 
     match token {
         Some(token) => {
             let jwt = &token.0.token;
@@ -162,19 +164,12 @@ pub fn update_user_handler(mut req: Request, res: Response, _: Captures) {
                     let mut sql = Core::new().unwrap();
                     let update_user_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
                         .and_then(|conn| { conn.query(                            
-                            "UPDATE [dbo].[Users] SET [UserName]=@P2,[Bio]=@P3,[Image]=@P4, [Email] = @P5 WHERE [Id] = @P1; SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users] WHERE [Id] = @P1", 
+                            "UPDATE [dbo].[Users] SET [UserName]=@P2,[Bio]=@P3,[Image]=@P4, [Email] = @P5 WHERE [Id] = @P1; SELECT [Email],[Token],[UserName],[Bio],[Image],Id FROM [dbo].[Users] WHERE [Id] = @P1", 
                             &[&logged_in_user_id, &user_name, &bio, &image, &email]
                             )
                             .for_each_row(|row| {
-                                let email : &str = row.get(0);
-                                let token : &str = row.get(1);
-                                let user_name : &str = row.get(2);
-                                let bio : Option<&str> = row.get(3);
-                                let image : Option<&str> = row.get(4);
-                                result = Some(User{ 
-                                    email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
-                                    image:image.map(|s| s.to_string()), username:user_name.to_string()
-                                });
+                                let (_,_,result2) = get_user_from_row(row);
+                                result = result2;
                                 Ok(())
                             })
                         }
@@ -403,37 +398,47 @@ pub fn authentication_handler(mut req: Request, mut res: Response, _: Captures) 
     let _ = req.read_to_string(&mut body);    
     let login : Login = serde_json::from_str(&body).unwrap();    
 
-    let mut sql = Core::new().unwrap();
-    let email : &str = &login.user.email;
-    let get_user_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-        .and_then(|conn| conn.query( "SELECT TOP 1 [Token], [Id] FROM [dbo].[Users] WHERE [Email] = @P1", &[&email] )
-        .for_each_row(|row| {
-            let stored_hash : &str = row.get(0);
-            let user_id : i32 = row.get(1);
-            let authenticated_user = crypto::pbkdf2::pbkdf2_check( &login.user.password, stored_hash);
-            *res.status_mut() = StatusCode::Unauthorized;
+    let mut result : Option<UserResult> = None; 
+    {
+        let mut sql = Core::new().unwrap();
+        let email : &str = &login.user.email;
+        let get_user_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+            .and_then(|conn| conn.query( "SELECT TOP 1 [Email],[Token],[UserName],[Bio],[Image], Id FROM [dbo].[Users] WHERE [Email] = @P1", &[&email] )
+            .for_each_row(|row| {
+                let (user_id,stored_hash,result2) = get_user_from_row(row);
+                let authenticated_user = crypto::pbkdf2::pbkdf2_check( &login.user.password, &stored_hash);
+                *res.status_mut() = StatusCode::Unauthorized;
 
-            match authenticated_user {
-                Ok(valid) => {
-                    if valid {                     
-                        let token = new_token(user_id.to_string().as_ref(), &login.user.password).unwrap();
+                match authenticated_user {
+                    Ok(valid) => {
+                        if valid {                     
+                            let token = new_token(user_id.to_string().as_ref(), &login.user.password).unwrap();
 
-                        res.headers_mut().set(
-                            Authorization(
-                                Bearer {
-                                    token: token.to_owned()
-                                }
-                            )
-                        );
-                        *res.status_mut() = StatusCode::Ok;
+                            res.headers_mut().set(
+                                Authorization(
+                                    Bearer {
+                                        token: token.to_owned()
+                                    }
+                                )
+                            );
+                            *res.status_mut() = StatusCode::Ok;
+                            result = result2;
+                        }
                     }
-                }
-                _ => {}
-            }            
-            Ok(())
-        })
-    );
-    sql.run(get_user_cmd).unwrap(); 
+                    _ => { result = None; }
+                }            
+                Ok(())
+            })
+        );
+        sql.run(get_user_cmd).unwrap(); 
+    }
+
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }  
 }
 
 
@@ -443,6 +448,9 @@ use hyper::Client;
 use user::rand::Rng;
 
 #[cfg(test)]
+pub static JACOB_PASSWORD : &'static str = r#"jakejake"#;
+
+#[cfg(test)]
 pub fn register_jacob() -> (std::string::String, std::string::String) {
     let client = Client::new();
     let since = since_the_epoch();
@@ -450,7 +458,7 @@ pub fn register_jacob() -> (std::string::String, std::string::String) {
     let num = rand::thread_rng().gen_range(0, 1000);
     let user_name = format!( "Jacob-{}-{}", since, num );
     let email = format!( "jake-{}-{}@jake.jake", since, num );
-    let body = format!(r#"{{"user":{{"username": "{}","email": "{}","password": "jakejake"}}}}"#, user_name, email); 
+    let body = format!(r#"{{"user":{{"username": "{}","email": "{}","password": "{}"}}}}"#, user_name, email, JACOB_PASSWORD); 
 
     let mut res = client.post("http://localhost:6767/api/users")
         .body(&body)
@@ -470,15 +478,22 @@ pub fn register_jacob() -> (std::string::String, std::string::String) {
 }
 
 #[cfg(test)]
-pub fn login_jacob( email : std::string::String ) -> std::string::String {
+pub fn login_jacob( email : std::string::String, password : String ) -> std::string::String {
     let client = Client::new();
 
-    let body = format!(r#"{{"user":{{"email": "{}","password": "jakejake"}}}}"#, email);
+    let body = format!(r#"{{"user":{{"email": "{}","password": "{}"}}}}"#, email, password);
 
-    let res = client.post("http://localhost:6767/api/users/login")
+    let mut res = client.post("http://localhost:6767/api/users/login")
         .body(&body)
         .send()
         .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+
+    let login : UserResult = serde_json::from_str(&buffer).unwrap();   
+    let logged_user = login.user;  
+    assert_eq!(logged_user.email, email); 
+        
     assert_eq!(res.status, hyper::Ok);
     let token = res.headers.get::<Authorization<Bearer>>().unwrap(); 
     let jwt = &token.0.token;
@@ -489,7 +504,7 @@ pub fn login_jacob( email : std::string::String ) -> std::string::String {
 fn follow_jacob() -> (std::string::String, std::string::String) {
     let client = Client::new();
     let ( user_name, email ) = register_jacob();
-    let jwt = login_jacob( email );
+    let jwt = login_jacob( email, JACOB_PASSWORD.to_string() );
     let url = format!("http://localhost:6767/api/profiles/{}/follow", user_name);
     println!("url:{}", url);
 
@@ -514,13 +529,16 @@ fn registration_test() {
 fn login_test() {
     let client = Client::new();
     let ( user_name, email ) = register_jacob();
-    let body = format!(r#"{{"user":{{"email": "{}","password": "jakejake"}}}}"#, email);
+    login_jacob( email, JACOB_PASSWORD.to_string() );
+}
 
-    let res = client.post("http://localhost:6767/api/users/login")
-        .body(&body)
-        .send()
-        .unwrap();
-    assert_eq!(res.status, hyper::Ok);
+#[cfg(test)]
+#[test]
+#[should_panic]
+fn login_fail_test() {
+    let client = Client::new();
+    let ( user_name, email ) = register_jacob();
+    login_jacob( email, JACOB_PASSWORD.to_string() + "!" );
 }
 
 #[cfg(test)]
@@ -555,7 +573,7 @@ fn profile_logged_test() {
     let client = Client::new();
 
     let ( user_name, email ) = register_jacob();
-    let jwt = login_jacob( email );
+    let jwt = login_jacob( email, JACOB_PASSWORD.to_string() );
     let url = format!("http://localhost:6767/api/profiles/{}", user_name);
     let expected =  format!(r#"{{"username":"{}","bio":null,"image":null,"following":false}}"#, user_name);
 
