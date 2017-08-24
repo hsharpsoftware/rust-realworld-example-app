@@ -123,15 +123,7 @@ pub fn registration_handler(mut req: Request, res: Response, _: Captures) {
                 ,@P2
                 ,@P3); ; SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users] WHERE [Id] = SCOPE_IDENTITY()" , &[ &email, &token, &username]  )
             .for_each_row( |row| {
-                                    let email : &str = row.get(0);
-                                    let token : &str = row.get(1);
-                                    let user_name : &str = row.get(2);
-                                    let bio : Option<&str> = row.get(3);
-                                    let image : Option<&str> = row.get(4);
-                                    result = Some(UserResult{user:User{ 
-                                        email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
-                                        image:image.map(|s| s.to_string()), username:user_name.to_string()
-                                    }});
+                                    result = get_user_from_row(row);
                                     Ok(())
                 }            
             )
