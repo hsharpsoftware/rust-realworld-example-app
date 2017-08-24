@@ -100,6 +100,21 @@ fn get_user_from_row( row : tiberius::query::QueryRow ) -> (i32, String, Option<
     (user_id, token.to_string(), result)
 }
 
+fn get_profile_from_row(row : tiberius::query::QueryRow) ->Option<ProfileResult> {
+    let _ : &str = row.get(0);
+    let _ : &str = row.get(1);
+    let user_name : &str = row.get(2);
+    let bio : Option<&str> = row.get(3);
+    let image : Option<&str> = row.get(4);
+    let f : i32 = row.get(5);
+    let following : bool = f == 1;
+    let result = Some(ProfileResult{profile:Profile{ 
+        following:following, bio:bio.map(|s| s.to_string()),
+        image:image.map(|s| s.to_string()), username:user_name.to_string()
+    }});    
+    result
+}
+
 pub fn registration_handler(mut req: Request, res: Response, _: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
@@ -255,7 +270,7 @@ pub fn get_profile_handler(req: Request, res: Response, c: Captures) {
     let caps = c.unwrap();
     let profile = &caps[0].replace("/api/profiles/", "");
     println!("profile: {}", profile);
-    let mut result : Option<Profile> = None; 
+    let mut result : Option<ProfileResult> = None; 
 
     {
         let mut sql = Core::new().unwrap();
@@ -265,17 +280,7 @@ pub fn get_profile_handler(req: Request, res: Response, c: Captures) {
 ( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @P2 ) as Following
 FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
             ).for_each_row(|row| {
-                let _ : &str = row.get(0);
-                let _ : &str = row.get(1);
-                let user_name : &str = row.get(2);
-                let bio : Option<&str> = row.get(3);
-                let image : Option<&str> = row.get(4);
-                let f : i32 = row.get(5);
-                let following : bool = f == 1;
-                result = Some(Profile{ 
-                    following:following, bio:bio.map(|s| s.to_string()),
-                    image:image.map(|s| s.to_string()), username:user_name.to_string()
-                });
+                result = get_profile_from_row(row);
                 Ok(())
             })
         );
@@ -304,7 +309,7 @@ pub fn unfollow_handler(req: Request, res: Response, c: Captures) {
 
     let caps = c.unwrap();
     let profile = &caps[0].replace("/api/profiles/", "").replace("/follow", "");
-    let mut result : Option<Profile> = None; 
+    let mut result : Option<ProfileResult> = None; 
 
     {
         let mut sql = Core::new().unwrap();
@@ -316,17 +321,7 @@ pub fn unfollow_handler(req: Request, res: Response, c: Captures) {
 FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
             )
             .for_each_row(|row| {
-                let _ : &str = row.get(0);
-                let _ : &str = row.get(1);
-                let user_name : &str = row.get(2);
-                let bio : Option<&str> = row.get(3);
-                let image : Option<&str> = row.get(4);
-                let f : i32 = row.get(5);
-                let following : bool = f == 1;
-                result = Some(Profile{ 
-                    following:following, bio:bio.map(|s| s.to_string()),
-                    image:image.map(|s| s.to_string()), username:user_name.to_string()
-                });
+                result = get_profile_from_row(row);
                 Ok(())
             })
         );
@@ -356,7 +351,7 @@ pub fn follow_handler(req: Request, res: Response, c: Captures) {
     let caps = c.unwrap();
     let profile = &caps[0].replace("/api/profiles/", "").replace("/follow", "");
     println!("profile: {}", profile);
-    let mut result : Option<Profile> = None; 
+    let mut result : Option<ProfileResult> = None; 
 
     {
         let mut sql = Core::new().unwrap();
@@ -368,17 +363,7 @@ pub fn follow_handler(req: Request, res: Response, c: Captures) {
 ( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @P2 ) as Following
 FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
             ).for_each_row(|row| {
-                let _ : &str = row.get(0);
-                let _ : &str = row.get(1);
-                let user_name : &str = row.get(2);
-                let bio : Option<&str> = row.get(3);
-                let image : Option<&str> = row.get(4);
-                let f : i32 = row.get(5);
-                let following : bool = f == 1;
-                result = Some(Profile{ 
-                    following:following, bio:bio.map(|s| s.to_string()),
-                    image:image.map(|s| s.to_string()), username:user_name.to_string()
-                });
+                result = get_profile_from_row(row);
                 Ok(())
             })
         );
@@ -509,10 +494,19 @@ fn follow_jacob() -> (std::string::String, std::string::String) {
     let url = format!("http://localhost:6767/api/profiles/{}/follow", user_name);
     println!("url:{}", url);
 
-    let res = client.post(&url)
+    let mut res = client.post(&url)
         .header(Authorization(Bearer {token: jwt.to_owned()}))
         .send()
         .unwrap();
+
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+
+    let profile_result : ProfileResult = serde_json::from_str(&buffer).unwrap();   
+    let profile = profile_result.profile;  
+    assert_eq!(profile.username, user_name); 
+    assert_eq!(profile.following, true);
+
     assert_eq!(res.status, hyper::Ok);
 
     (user_name, jwt)
@@ -625,9 +619,11 @@ fn profile_unlogged_test() {
     let mut buffer = String::new();
     res.read_to_string(&mut buffer).unwrap(); 
 
-    let body = format!(r#"{{"username":"{}","bio":null,"image":null,"following":false}}"#, user_name);
+    let profile_result : ProfileResult = serde_json::from_str(&buffer).unwrap();   
+    let profile = profile_result.profile;  
+    assert_eq!(profile.username, user_name); 
+    assert_eq!(profile.following, false); 
 
-    assert_eq!( buffer, body );
     assert_eq!(res.status, hyper::Ok);
 }
 
@@ -646,7 +642,6 @@ fn profile_logged_test() {
     let ( user_name, email ) = register_jacob();
     let jwt = login_jacob( email, JACOB_PASSWORD.to_string() );
     let url = format!("http://localhost:6767/api/profiles/{}", user_name);
-    let expected =  format!(r#"{{"username":"{}","bio":null,"image":null,"following":false}}"#, user_name);
 
     let mut res = client.get(&url)
         .header(Authorization(Bearer {token: jwt}))
@@ -654,7 +649,12 @@ fn profile_logged_test() {
         .unwrap();
     let mut buffer = String::new();
     res.read_to_string(&mut buffer).unwrap(); 
-    assert_eq!( buffer, expected );
+    
+    let profile_result : ProfileResult = serde_json::from_str(&buffer).unwrap();   
+    let profile = profile_result.profile;  
+    assert_eq!(profile.username, user_name); 
+    assert_eq!(profile.following, false);
+    
     assert_eq!(res.status, hyper::Ok);
 }
 
@@ -666,10 +666,18 @@ fn unfollow_test() {
     let (user_name, jwt) = follow_jacob();
     let url = format!("http://localhost:6767/api/profiles/{}/follow", user_name);
 
-    let res = client.delete(&url)
+    let mut res = client.delete(&url)
         .header(Authorization(Bearer {token: jwt}))
         .body("")
         .send()
         .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+
+    let profile_result : ProfileResult = serde_json::from_str(&buffer).unwrap();   
+    let profile = profile_result.profile;  
+    assert_eq!(profile.username, user_name); 
+    assert_eq!(profile.following, false);
+
     assert_eq!(res.status, hyper::Ok);
 }

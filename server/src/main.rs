@@ -105,6 +105,12 @@ struct Profile {
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
+struct ProfileResult {
+    profile: Profile,
+}
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
 #[allow(non_snake_case)]
 struct Comment {
     id: i32,
