@@ -194,7 +194,7 @@ pub fn update_user_handler(mut req: Request, res: Response, _: Captures) {
 
 pub fn get_current_user_handler(req: Request, res: Response, _: Captures) {
     let token = req.headers.get::<Authorization<Bearer>>(); 
-    let mut result : Option<User> = None; 
+    let mut result : Option<UserResult> = None; 
     match token {
         Some(token) => {
             let jwt = &token.0.token;
@@ -206,18 +206,11 @@ pub fn get_current_user_handler(req: Request, res: Response, _: Captures) {
                     let mut sql = Core::new().unwrap();
                     let get_user = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
                         .and_then(|conn| conn.query(                            
-                            "SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users]
+                            "SELECT [Email],[Token],[UserName],[Bio],[Image], Id FROM [dbo].[Users]
                                 WHERE [Id] = @P1", &[&logged_in_user]
                         ).for_each_row(|row| {
-                            let email : &str = row.get(0);
-                            let token : &str = row.get(1);
-                            let user_name : &str = row.get(2);
-                            let bio : Option<&str> = row.get(3);
-                            let image : Option<&str> = row.get(4);
-                            result = Some(User{ 
-                                email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
-                                image:image.map(|s| s.to_string()), username:user_name.to_string()
-                            });
+                            let (_,_,result2) = get_user_from_row(row);
+                            result = result2;
                             Ok(())
                         })
                     );
@@ -510,7 +503,6 @@ fn follow_jacob() -> (std::string::String, std::string::String) {
 
     let res = client.post(&url)
         .header(Authorization(Bearer {token: jwt.to_owned()}))
-        .body("")
         .send()
         .unwrap();
     assert_eq!(res.status, hyper::Ok);
@@ -531,6 +523,50 @@ fn login_test() {
     let ( user_name, email ) = register_jacob();
     login_jacob( email, JACOB_PASSWORD.to_string() );
 }
+
+#[cfg(test)]
+#[test]
+fn get_current_user_test() {
+    let client = Client::new();
+    let ( user_name, email ) = register_jacob();
+    let jwt = login_jacob( email.to_owned(), JACOB_PASSWORD.to_string() );
+
+    let url = format!("http://localhost:6767/api/user");
+
+    let mut res = client.get(&url)
+        .header(Authorization(Bearer {token: jwt}))
+        .send()
+        .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+
+    let registration : UserResult = serde_json::from_str(&buffer).unwrap();   
+    let registered_user = registration.user;  
+    assert_eq!(registered_user.email, email); 
+    assert_eq!(registered_user.username, user_name); 
+
+    assert_eq!(res.status, hyper::Ok);
+}
+
+#[cfg(test)]
+#[test]
+#[should_panic]
+fn get_current_user_fail_test() {
+    let client = Client::new();
+
+    let url = format!("http://localhost:6767/api/user");
+
+    let mut res = client.get(&url)
+        .send()
+        .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+
+    let registration : UserResult = serde_json::from_str(&buffer).unwrap();   
+    let registered_user = registration.user;  
+    assert_eq!(res.status, hyper::Ok);
+}
+
 
 #[cfg(test)]
 #[test]
