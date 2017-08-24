@@ -153,18 +153,26 @@ pub fn update_user_handler(mut req: Request, res: Response, _: Captures) {
 
             match logged_in_user_id {
                 Some(logged_in_user_id) => {
-                    println!("logged_in_user {}", &logged_in_user_id);
+                    println!("logged_in_user {}, received '{}'", &logged_in_user_id, &body);
 
                     let update_user : UpdateUser = serde_json::from_str(&body).unwrap();     
-                    let user_name : &str = &update_user.user.username;
+                    let user_name : &str = &update_user.user.username.as_ref().map(|x| &**x).unwrap_or("");
                     let bio : &str = update_user.user.bio.as_ref().map(|x| &**x).unwrap_or("");
                     let image : &str = update_user.user.image.as_ref().map(|x| &**x).unwrap_or("");
-                    let email : &str = &update_user.user.email;
+                    let email : &str = &update_user.user.email.as_ref().map(|x| &**x).unwrap_or("");
+                    let password : &str = &update_user.user.password.as_ref().map(|x| &**x).unwrap_or("");
 
                     let mut sql = Core::new().unwrap();
                     let update_user_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
                         .and_then(|conn| { conn.query(                            
-                            "UPDATE [dbo].[Users] SET [UserName]=@P2,[Bio]=@P3,[Image]=@P4, [Email] = @P5 WHERE [Id] = @P1; SELECT [Email],[Token],[UserName],[Bio],[Image],Id FROM [dbo].[Users] WHERE [Id] = @P1", 
+                            "  UPDATE [dbo].[Users] SET 
+                                [UserName]=CASE WHEN(LEN(@P2)=0) THEN UserName ELSE @P2 END,
+                                [Bio]=CASE WHEN(LEN(@P3)=0) THEN Bio ELSE @P3 END,
+                                [Image]=CASE WHEN(LEN(@P4)=0) THEN Image ELSE @P4 END,
+                                [Email]=CASE WHEN(LEN(@P5)=0) THEN Email ELSE @P5 END
+                                WHERE [Id] = @P1; 
+                            SELECT [Email],[Token],[UserName],[Bio],[Image],Id FROM [dbo].[Users] WHERE [Id] = @P1
+                            ", 
                             &[&logged_in_user_id, &user_name, &bio, &image, &email]
                             )
                             .for_each_row(|row| {
@@ -544,6 +552,33 @@ fn get_current_user_test() {
     let registered_user = registration.user;  
     assert_eq!(registered_user.email, email); 
     assert_eq!(registered_user.username, user_name); 
+
+    assert_eq!(res.status, hyper::Ok);
+}
+
+#[cfg(test)]
+#[test]
+fn update_user_test() {
+    let client = Client::new();
+    let ( user_name, email ) = register_jacob();
+    let jwt = login_jacob( email.to_owned(), JACOB_PASSWORD.to_string() );
+
+    let url = format!("http://localhost:6767/api/user");
+    let new_user_name = user_name.to_owned() + "_CH";
+    let body = format!(r#"{{"user": {{ "username":"{}"}}}}"#, new_user_name.to_owned());
+
+    let mut res = client.put(&url)
+        .header(Authorization(Bearer {token: jwt}))
+        .body(&body)
+        .send()
+        .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+
+    let registration : UserResult = serde_json::from_str(&buffer).unwrap();   
+    let registered_user = registration.user;  
+    assert_eq!(registered_user.email, email); 
+    assert_eq!(registered_user.username, new_user_name); 
 
     assert_eq!(res.status, hyper::Ok);
 }

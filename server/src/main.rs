@@ -221,8 +221,9 @@ struct CreateArticleDetail {
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
 struct UpdateUserDetail {
-    email: String,
-    username : String,
+    email: Option<String>,
+    username : Option<String>,
+    password : Option<String>,
     bio : Option<String>,
     image: Option<String>
 }
