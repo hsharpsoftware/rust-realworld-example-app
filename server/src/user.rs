@@ -86,6 +86,19 @@ pub fn login(token: &str) -> Option<i32> {
     }
 }
 
+fn get_user_from_row( row : tiberius::query::QueryRow ) -> Option<UserResult> {
+    let email : &str = row.get(0);
+    let token : &str = row.get(1);
+    let user_name : &str = row.get(2);
+    let bio : Option<&str> = row.get(3);
+    let image : Option<&str> = row.get(4);
+    let result = Some(UserResult{user:User{ 
+        email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
+        image:image.map(|s| s.to_string()), username:user_name.to_string()
+    }});
+    result    
+}
+
 pub fn registration_handler(mut req: Request, res: Response, _: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
@@ -95,7 +108,7 @@ pub fn registration_handler(mut req: Request, res: Response, _: Captures) {
     let token : &str = &crypto::pbkdf2::pbkdf2_simple(&registration.user.password, 10000).unwrap();
     let username : &str = &registration.user.username;
 
-    let mut result : Option<RegistrationResult> = None; 
+    let mut result : Option<UserResult> = None; 
     {
         let mut lp = Core::new().unwrap();
         let future = SqlConnection::connect(lp.handle(), CONNECTION_STRING.as_str())
@@ -115,7 +128,7 @@ pub fn registration_handler(mut req: Request, res: Response, _: Captures) {
                                     let user_name : &str = row.get(2);
                                     let bio : Option<&str> = row.get(3);
                                     let image : Option<&str> = row.get(4);
-                                    result = Some(RegistrationResult{user:User{ 
+                                    result = Some(UserResult{user:User{ 
                                         email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
                                         image:image.map(|s| s.to_string()), username:user_name.to_string()
                                     }});
@@ -443,7 +456,6 @@ pub fn register_jacob() -> (std::string::String, std::string::String) {
     let since = since_the_epoch();
 
     let num = rand::thread_rng().gen_range(0, 1000);
-
     let user_name = format!( "Jacob-{}-{}", since, num );
     let email = format!( "jake-{}-{}@jake.jake", since, num );
     let body = format!(r#"{{"user":{{"username": "{}","email": "{}","password": "jakejake"}}}}"#, user_name, email); 
@@ -456,7 +468,7 @@ pub fn register_jacob() -> (std::string::String, std::string::String) {
     let mut buffer = String::new();
     res.read_to_string(&mut buffer).unwrap(); 
 
-    let registration : RegistrationResult = serde_json::from_str(&buffer).unwrap();   
+    let registration : UserResult = serde_json::from_str(&buffer).unwrap();   
     let registered_user = registration.user;  
     assert_eq!(registered_user.email, email); 
     assert_eq!(registered_user.username, user_name); 

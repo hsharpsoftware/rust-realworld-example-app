@@ -155,7 +155,7 @@ pub struct Registration {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct RegistrationResult {
+pub struct UserResult {
     user : User
 }
 
