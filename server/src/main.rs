@@ -36,7 +36,6 @@ use futures::Future;
 use tokio_core::reactor::Core;
 use tiberius::{SqlConnection};
 use tiberius::stmt::ResultStreamExt;
-use tiberius::stmt::Statement;
 
 use chrono::prelude::*;
 
@@ -48,18 +47,7 @@ use std::path::PathBuf;
 
 use hyper::server::{Server, Request, Response};
 use reroute::{RouterBuilder, Captures};
-use hyper::header::{Authorization, Bearer};
 use hyper::status::StatusCode;
-
-use crypto::sha2::Sha256;
-
-use jwt::{
-    Header,
-    Registered,
-    Token,
-};
-
-use slug::slugify;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -164,6 +152,11 @@ struct RegistrationDetails {
 #[derive(Serialize, Deserialize)]
 pub struct Registration {
     user : RegistrationDetails
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RegistrationResult {
+    user : User
 }
 
 #[derive(Debug)]

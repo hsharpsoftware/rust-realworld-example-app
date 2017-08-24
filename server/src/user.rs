@@ -86,7 +86,7 @@ pub fn login(token: &str) -> Option<i32> {
     }
 }
 
-pub fn registration_handler(mut req: Request, _: Response, _: Captures) {
+pub fn registration_handler(mut req: Request, res: Response, _: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
     let registration : Registration = serde_json::from_str(&body).unwrap();     
@@ -95,20 +95,43 @@ pub fn registration_handler(mut req: Request, _: Response, _: Captures) {
     let token : &str = &crypto::pbkdf2::pbkdf2_simple(&registration.user.password, 10000).unwrap();
     let username : &str = &registration.user.username;
 
-    let mut lp = Core::new().unwrap();
-    let future = SqlConnection::connect(lp.handle(), CONNECTION_STRING.as_str())
-    .and_then(|conn| {
-        conn.query( "
-        INSERT INTO [dbo].[Users]
-            ([Email]
-            ,[Token]
-            ,[UserName])
-        VALUES
-            (@P1
-            ,@P2
-            ,@P3); SELECT SCOPE_IDENTITY()" , &[ &email, &token, &username]  ).for_each_row( handle_row_no_value )
-    } );
-     lp.run(future).unwrap();
+    let mut result : Option<RegistrationResult> = None; 
+    {
+        let mut lp = Core::new().unwrap();
+        let future = SqlConnection::connect(lp.handle(), CONNECTION_STRING.as_str())
+        .and_then(|conn| {
+            conn.query( "
+            INSERT INTO [dbo].[Users]
+                ([Email]
+                ,[Token]
+                ,[UserName])
+            VALUES
+                (@P1
+                ,@P2
+                ,@P3); ; SELECT [Email],[Token],[UserName],[Bio],[Image] FROM [dbo].[Users] WHERE [Id] = SCOPE_IDENTITY()" , &[ &email, &token, &username]  )
+            .for_each_row( |row| {
+                                    let email : &str = row.get(0);
+                                    let token : &str = row.get(1);
+                                    let user_name : &str = row.get(2);
+                                    let bio : Option<&str> = row.get(3);
+                                    let image : Option<&str> = row.get(4);
+                                    result = Some(RegistrationResult{user:User{ 
+                                        email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
+                                        image:image.map(|s| s.to_string()), username:user_name.to_string()
+                                    }});
+                                    Ok(())
+                }            
+            )
+        } );
+        lp.run(future).unwrap();
+    }
+
+    if result.is_some() {
+        let result = result.unwrap();
+        let result = serde_json::to_string(&result).unwrap();
+        let result : &[u8] = result.as_bytes();
+        res.send(&result).unwrap();                        
+    }        
 }
 
 pub fn update_user_handler(mut req: Request, res: Response, _: Captures) {
@@ -425,10 +448,19 @@ pub fn register_jacob() -> (std::string::String, std::string::String) {
     let email = format!( "jake-{}-{}@jake.jake", since, num );
     let body = format!(r#"{{"user":{{"username": "{}","email": "{}","password": "jakejake"}}}}"#, user_name, email); 
 
-    let res = client.post("http://localhost:6767/api/users")
+    let mut res = client.post("http://localhost:6767/api/users")
         .body(&body)
         .send()
         .unwrap();
+
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+
+    let registration : RegistrationResult = serde_json::from_str(&buffer).unwrap();   
+    let registered_user = registration.user;  
+    assert_eq!(registered_user.email, email); 
+    assert_eq!(registered_user.username, user_name); 
+
     assert_eq!(res.status, hyper::Ok);  
     ( user_name, email )
 }
