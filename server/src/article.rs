@@ -199,51 +199,11 @@ fn process_and_return_article(mut req: Request, res: Response, c: Captures, sql_
 
 
 pub fn favorite_article_handler(mut req: Request, res: Response, c: Captures) {
-    let mut body = String::new();
-    let _ = req.read_to_string(&mut body);    
-    let token =  req.headers.get::<Authorization<Bearer>>(); 
-    let logged_id : i32 =  
-        match token {
-            Some(token) => {
-                let jwt = &token.0.token;
-                login(&jwt).unwrap()
-
-            }
-            _ => 0
-        };
-
-    let caps = c.unwrap();
-    let slug = &caps[0].replace("/api/articles/", "").replace("/favorite", "");
-    println!("favorite_article_handler:slug: {}", slug);
-    println!("favorite_article_handler:logged_id: {}", logged_id);
-
-    let mut result : Option<CreateArticleResult> = None; 
-    {
-        let mut sql = Core::new().unwrap();
-        let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-            .and_then(|conn| conn.query(                            
-                format!("declare @id int; select TOP(1) @id = id from Articles where Slug = @P1 ORDER BY 1; DECLARE @logged int = @P2;
+    process_and_return_article(req, res, c, "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1 ORDER BY 1; DECLARE @logged int = @P2;
                 INSERT INTO [dbo].[FavoritedArticles]
 	            ([ArticleId],
 	            [UserId])
-	            VALUES (@id,@P2);
-                {}
-                ", ARTICLE_SELECT)
-                , &[&(slug.as_str()), &(logged_id)]
-            ).for_each_row(|row| {
-                result = get_article_from_row(row);
-                Ok(())
-            })
-        );
-        sql.run(get_cmd).unwrap(); 
-    }
-
-    if result.is_some() {
-        let result = result.unwrap();
-        let result = serde_json::to_string(&result).unwrap();
-        let result : &[u8] = result.as_bytes();
-        res.send(&result).unwrap();                        
-    }   
+	            VALUES (@id,@P2)")                
 }
 
 pub fn unfavorite_article_handler(mut req: Request, res: Response, c: Captures) {
