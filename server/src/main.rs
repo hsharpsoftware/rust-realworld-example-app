@@ -144,7 +144,7 @@ struct InternalError {
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
 struct ErrorDetail {
-    message : String
+    body : Vec<String>
 }
 
 #[derive(Debug)]
@@ -303,7 +303,6 @@ fn get_database_config() -> DatabaseConfig {
 
 use hyper::header::{Authorization, Bearer};
 
-#[allow(dead_code)]
 fn prepare_parameters( mut req: Request ) -> (String, i32) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
@@ -324,7 +323,6 @@ fn prepare_parameters( mut req: Request ) -> (String, i32) {
 
 fn process<'a, T>(
         res: Response, 
-        c: Captures, 
         sql_command : &'static str,
         sql_select_command : &'static str,
         get_t_from_row : fn(tiberius::query::QueryRow) -> Option<T>,

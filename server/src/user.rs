@@ -112,8 +112,8 @@ fn get_profile_from_row(row : tiberius::query::QueryRow) ->Option<ProfileResult>
 
 static USER_SELECT : &'static str = r#"SELECT [Email],[Token],[UserName],[Bio],[Image], Id FROM [dbo].[Users] WHERE [Id] = @id"#;
 
-pub fn registration_handler(mut req: Request, res: Response, c: Captures) {
-    let (body, logged_id) = prepare_parameters(req);
+pub fn registration_handler(req: Request, res: Response, _: Captures) {
+    let (body, _) = prepare_parameters(req);
 
     let registration : Registration = serde_json::from_str(&body).unwrap();     
     let user = registration.user;
@@ -122,7 +122,7 @@ pub fn registration_handler(mut req: Request, res: Response, c: Captures) {
     let user_name :&str = &user.username;
 
     process(
-        res, c,
+        res,
         r#"INSERT INTO [dbo].[Users]
                 ([Email]
                 ,[Token]
