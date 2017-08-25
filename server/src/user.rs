@@ -166,6 +166,7 @@ pub fn update_user_handler(mut req: Request, res: Response, _: Captures) {
                     let image : &str = update_user.user.image.as_ref().map(|x| &**x).unwrap_or("");
                     let email : &str = &update_user.user.email.as_ref().map(|x| &**x).unwrap_or("");
                     let password : &str = &update_user.user.password.as_ref().map(|x| &**x).unwrap_or("");
+                    let token : &str = &crypto::pbkdf2::pbkdf2_simple(password, 10000).unwrap();
 
                     let mut sql = Core::new().unwrap();
                     let update_user_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
@@ -174,11 +175,12 @@ pub fn update_user_handler(mut req: Request, res: Response, _: Captures) {
                                 [UserName]=CASE WHEN(LEN(@P2)=0) THEN UserName ELSE @P2 END,
                                 [Bio]=CASE WHEN(LEN(@P3)=0) THEN Bio ELSE @P3 END,
                                 [Image]=CASE WHEN(LEN(@P4)=0) THEN Image ELSE @P4 END,
-                                [Email]=CASE WHEN(LEN(@P5)=0) THEN Email ELSE @P5 END
+                                [Email]=CASE WHEN(LEN(@P5)=0) THEN Email ELSE @P5 END,
+                                [Token]=CASE WHEN(LEN(@P7)=0) THEN Token ELSE @P6 END
                                 WHERE [Id] = @P1; 
                             SELECT [Email],[Token],[UserName],[Bio],[Image],Id FROM [dbo].[Users] WHERE [Id] = @P1
                             ", 
-                            &[&logged_in_user_id, &user_name, &bio, &image, &email]
+                            &[&logged_in_user_id, &user_name, &bio, &image, &email, &token, &password ]
                             )
                             .for_each_row(|row| {
                                 let (_,_,result2) = get_user_from_row(row);
