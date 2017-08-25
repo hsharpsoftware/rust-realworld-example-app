@@ -55,6 +55,15 @@ use slug::slugify;
 
 use super::*;
 
+static ARTICLE_SELECT : &'static str = r#"
+  SELECT Slug, Title, [Description], Body, Created, Updated, Users.UserName, Users.Bio, Users.[Image], 
+                (SELECT COUNT(*) FROM Followings WHERE FollowerId=@logged AND Author=FollowingId) as [Following],
+                (SELECT COUNT(*) FROM FavoritedArticles WHERE ArticleId = @id ) as FavoritesCount,
+                (SELECT COUNT(*) FROM FavoritedArticles WHERE UserId = @logged ) as PersonalFavoritesCount,
+				(SELECT STRING_AGG(Tag, ',') FROM [Tags] inner join ArticleTags on ArticleTags.TagId = Tags.Id where ArticleId=@id)  as Tags
+                FROM Articles INNER JOIN Users on Author=Users.Id  WHERE Articles.Id = @id
+"#;
+
 fn get_article_from_row( row : tiberius::query::QueryRow ) -> Option<CreateArticleResult> {
     let slug : &str = row.get(0);
     let title : &str = row.get(1);
@@ -70,6 +79,7 @@ fn get_article_from_row( row : tiberius::query::QueryRow ) -> Option<CreateArtic
     let favorites_count: i32 = row.get(10);
     let personal_favorite_count: i32 = row.get(11);
     let favorited : bool = personal_favorite_count > 0;
+    let tags_combined : &str = row.get(12);
 
     let profile = Profile{ username: user_name.to_string(), bio:bio.map(|s| s.to_string()),
         image:image.map(|s| s.to_string()), following : following };
@@ -79,10 +89,10 @@ fn get_article_from_row( row : tiberius::query::QueryRow ) -> Option<CreateArtic
         title: title.to_string(),
         description : description.to_string(),
         body : body.to_string(),
-        tagList: Vec::new(), //TODO: change
+        tagList: tags_combined.split(",").map(|q| q.to_string()).collect(),
         createdAt: created,
         updatedAt: updated,
-        favorited : false,
+        favorited : favorited,
         favoritesCount : favorites_count,
         author : profile                                    
     };
@@ -114,16 +124,11 @@ pub fn create_article_handler(mut req: Request, res: Response, _: Captures) {
                     let mut sql = Core::new().unwrap();
                     let create_article_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
                         .and_then(|conn| { conn.query(                            
-                            "insert into Tags (Tag) SELECT EmployeeID = Item FROM dbo.SplitNVarchars(@P6, ',')  Except select Tag from Tags;                            
+                            format!("insert into Tags (Tag) SELECT EmployeeID = Item FROM dbo.SplitNVarchars(@P6, ',')  Except select Tag from Tags;                            
                             INSERT INTO Articles (Title, [Description], Body, Created, Author, Slug) Values (@P1, @P2, @P3, getdate(), @P4, @P5);
-                            DECLARE @id int = SCOPE_IDENTITY();
+                            DECLARE @id int = SCOPE_IDENTITY(); DECLARE @logged int = @P4;
                             insert into [ArticleTags] (ArticleId, TagId) SELECT @id, Id From Tags WHERE Tag IN (SELECT EmployeeID = Item FROM dbo.SplitNVarchars(@P6, ','));
-                            SELECT Slug, Title, [Description], Body, Created, Updated, Users.UserName, Users.Bio, Users.[Image], 
-                            (SELECT COUNT(*) FROM Followings WHERE FollowerId=@P4 AND Author=FollowingId) as [Following],
-                            (SELECT COUNT(*) FROM FavoritedArticles WHERE ArticleId = @id ) as FavoritesCount,
-                            (SELECT COUNT(*) FROM FavoritedArticles WHERE UserId = @P4 ) as PersonalFavoritesCount
-                            FROM Articles INNER JOIN Users on Author=Users.Id WHERE Articles.Id  = @id
-                            ", 
+                            {}", ARTICLE_SELECT ), 
                             &[&title, &description, &body, &logged_in_user_id, &slug,&tags,]
                             )
                             .for_each_row(|row| {
@@ -166,9 +171,10 @@ pub fn favorite_article_handler(mut req: Request, res: Response, c: Captures) {
 
     let caps = c.unwrap();
     let slug = &caps[0].replace("/api/articles/", "").replace("/favorite", "");
-    println!("slug: {}", slug);
+    println!("favorite_article_handler:slug: {}", slug);
+    println!("favorite_article_handler:logged_id: {}", logged_id);
 
-    let mut result : Option<Article> = None; 
+    let mut result : Option<CreateArticleResult> = None; 
     {
         let mut sql = Core::new().unwrap();
         let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
@@ -178,29 +184,15 @@ pub fn favorite_article_handler(mut req: Request, res: Response, c: Captures) {
 	            ([ArticleId],
 	            [UserId])
 	            VALUES (@id,@P2);
-                SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
-                INNER JOIN Users u ON a.Author = u.Id
-                where a.Id = @id
+                SELECT Slug, Title, [Description], Body, Created, Updated, Users.UserName, Users.Bio, Users.[Image], 
+                (SELECT COUNT(*) FROM Followings WHERE FollowerId=@P2 AND Author=FollowingId) as [Following],
+                (SELECT COUNT(*) FROM FavoritedArticles WHERE ArticleId = @id ) as FavoritesCount,
+                (SELECT COUNT(*) FROM FavoritedArticles WHERE UserId = @P2 ) as PersonalFavoritesCount
+                FROM Articles INNER JOIN Users on Author=Users.Id WHERE Articles.Id = @id
                 "
                 , &[&(slug.as_str()), &(logged_id)]
             ).for_each_row(|row| {
-                let slug : &str = row.get(0);
-                let title : &str = row.get(1);
-                let description : &str = row.get(2);
-                let body : &str = row.get(3);
-                let created_at : NaiveDateTime = row.get(4);
-                let updated_at : Option<chrono::NaiveDateTime> = row.get(5);
-                let user_name : &str = row.get(6);
-                let bio : Option<&str> = row.get(7);
-                let image :Option<&str> = row.get(8);
-                
-                let tag_list : Vec<String> = Vec::new();
-                let favorited : bool = true;
-                let favorites_count : i32 = 3;
-                let author = Profile{ username:user_name.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:false };
-                result = Some(Article{ 
-                    slug:slug.to_string(), title:title.to_string(), description:description.to_string(), body:body.to_string(), tagList:tag_list, createdAt:created_at, updatedAt:updated_at, favorited:favorited, favoritesCount:favorites_count, author:author
-                });
+                result = get_article_from_row(row);
                 Ok(())
             })
         );

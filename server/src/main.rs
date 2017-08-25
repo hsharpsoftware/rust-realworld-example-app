@@ -325,7 +325,6 @@ fn get_tags_test() {
         .unwrap();
     let mut buffer = String::new();
     res.read_to_string(&mut buffer).unwrap(); 
-    //assert_eq!( buffer, r#"{"username":"Jacob","bio":null,"image":null,"following":false}"# );
     assert_eq!(res.status, hyper::Ok);
 }
 
@@ -366,7 +365,7 @@ fn get_tags_handler(_: Request, res: Response, _: Captures) {
         let mut sql = Core::new().unwrap();
         let get_tags_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
             .and_then(|conn| conn.query(                            
-                "SELECT STRING_AGG(Tag, ', ') FROM [dbo].[Tags]", &[]
+                "SELECT STRING_AGG(Tag, ',') FROM [dbo].[Tags]", &[]
             ).for_each_row(|row| {
                 let all_tags : &str = row.get(0);
                 result = Some(GetTagsResult{ 
