@@ -304,38 +304,41 @@ fn get_database_config() -> DatabaseConfig {
 use hyper::header::{Authorization, Bearer};
 
 #[allow(dead_code)]
-fn process<T>(
-        mut req: Request, 
+fn prepare_parameters( mut req: Request ) -> (String, i32) {
+    let mut body = String::new();
+    let _ = req.read_to_string(&mut body);    
+    let token =  req.headers.get::<Authorization<Bearer>>(); 
+    let logged_id : i32 =  
+        match token {
+            Some(token) => {
+                let jwt = &token.0.token;
+                login(&jwt).unwrap()
+
+            }
+            _ => 0
+        };
+
+    println!("body: {}, logged_id: {}", body, logged_id);
+    (body, logged_id)
+}
+
+#[allow(dead_code)]
+fn process<'a, T>(
         res: Response, 
         c: Captures, 
         sql_command : &'static str,
         sql_select_command : &'static str,
         get_t_from_row : fn(tiberius::query::QueryRow) -> Option<T>,
-        get_sql_params : fn(i32, Captures, String) ->  &'static[&'static tiberius::ty::ToSql],
+        sql_params : &'a[&'a tiberius::ty::ToSql],
     ) where T: serde::Serialize
     {
-        let mut body = String::new();
-        let _ = req.read_to_string(&mut body);    
-        let token =  req.headers.get::<Authorization<Bearer>>(); 
-        let logged_id : i32 =  
-            match token {
-                Some(token) => {
-                    let jwt = &token.0.token;
-                    login(&jwt).unwrap()
-
-                }
-                _ => 0
-            };
-
-        println!("logged_id: {}", logged_id);
-
         let mut result : Option<T> = None; 
         {
             let mut sql = Core::new().unwrap();
             let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
                 .and_then(|conn| conn.query(                            
                     format!("{};{}",sql_command, sql_select_command)
-                    , get_sql_params(logged_id, c, body)
+                    , sql_params
                 ).for_each_row(|row| {
                     result = get_t_from_row(row);
                     Ok(())

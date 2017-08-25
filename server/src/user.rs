@@ -90,6 +90,11 @@ fn get_user_from_row( row : tiberius::query::QueryRow ) -> (i32, String, Option<
     (user_id, token.to_string(), result)
 }
 
+fn get_user_from_row_simple( row : tiberius::query::QueryRow ) -> Option<UserResult> {
+    let (_,_,result) = get_user_from_row(row);
+    result
+}
+
 fn get_profile_from_row(row : tiberius::query::QueryRow) ->Option<ProfileResult> {
     let _ : &str = row.get(0);
     let _ : &str = row.get(1);
@@ -105,7 +110,33 @@ fn get_profile_from_row(row : tiberius::query::QueryRow) ->Option<ProfileResult>
     result
 }
 
-pub fn registration_handler(mut req: Request, res: Response, _: Captures) {
+static USER_SELECT : &'static str = r#"SELECT [Email],[Token],[UserName],[Bio],[Image], Id FROM [dbo].[Users] WHERE [Id] = @id"#;
+
+pub fn registration_handler(mut req: Request, res: Response, c: Captures) {
+    let (body, logged_id) = prepare_parameters(req);
+
+    let registration : Registration = serde_json::from_str(&body).unwrap();     
+    let user = registration.user;
+    let email :&str = &user.email;
+    let token :&str = &crypto::pbkdf2::pbkdf2_simple(&user.password, 10000).unwrap();
+    let user_name :&str = &user.username;
+
+    process(
+        res, c,
+        r#"INSERT INTO [dbo].[Users]
+                ([Email]
+                ,[Token]
+                ,[UserName])
+            VALUES
+                (@P1
+                ,@P2
+                ,@P3); DECLARE @id int = SCOPE_IDENTITY();"#, USER_SELECT,
+        get_user_from_row_simple,
+        &[ &email, &token, &user_name ]
+    );
+
+    return;
+
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
     let registration : Registration = serde_json::from_str(&body).unwrap();     
