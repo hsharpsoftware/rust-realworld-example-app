@@ -216,6 +216,12 @@ struct CreateArticle {
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
+struct CreateArticleResult {
+    article: Article
+}
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
 #[allow(non_snake_case)]
 struct CreateArticleDetail {
     title: String,

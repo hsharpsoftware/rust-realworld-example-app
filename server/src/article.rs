@@ -55,12 +55,42 @@ use slug::slugify;
 
 use super::*;
 
+fn get_article_from_row( row : tiberius::query::QueryRow ) -> Option<CreateArticleResult> {
+    let slug : &str = row.get(0);
+    let title : &str = row.get(1);
+    let description : &str = row.get(2);
+    let body : &str = row.get(3);
+    let created : chrono::NaiveDateTime = row.get(4);
+    let updated : Option<chrono::NaiveDateTime> = row.get(5);
+    let user_name : &str = row.get(6);
+    let bio : Option<&str> = row.get(7);
+    let image : Option<&str> = row.get(8);
+    let f : i32 = row.get(9);
+    let following : bool = f == 1;
+
+    let profile = Profile{ username: user_name.to_string(), bio:bio.map(|s| s.to_string()),
+        image:image.map(|s| s.to_string()), following : following };
+    
+    let result = Article{ 
+        slug: slug.to_string(),
+        title: title.to_string(),
+        description : description.to_string(),
+        body : body.to_string(),
+        tagList: Vec::new(), //TODO: change
+        createdAt: created,
+        updatedAt: updated,
+        favorited : false,
+        favoritesCount : 0,
+        author : profile                                    
+    };
+    Some(CreateArticleResult{ article:result })
+}
 
 pub fn create_article_handler(mut req: Request, res: Response, _: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body);    
     let token =  req.headers.get::<Authorization<Bearer>>(); 
-    let mut result : Option<Article> = None; 
+    let mut result : Option<CreateArticleResult> = None; 
     match token {
         Some(token) => {
             let jwt = &token.0.token;
@@ -92,33 +122,7 @@ pub fn create_article_handler(mut req: Request, res: Response, _: Captures) {
                             &[&title, &description, &body, &logged_in_user_id, &slug,&tags,]
                             )
                             .for_each_row(|row| {
-                                let slug : &str = row.get(0);
-                                let title : &str = row.get(1);
-                                let description : &str = row.get(2);
-                                let body : &str = row.get(3);
-                                let created : chrono::NaiveDateTime = row.get(4);
-                                let updated : Option<chrono::NaiveDateTime> = row.get(5);
-                                let user_name : &str = row.get(6);
-                                let bio : Option<&str> = row.get(7);
-                                let image : Option<&str> = row.get(8);
-                                let f : i32 = row.get(9);
-                                let following : bool = f == 1;
-
-                                let profile = Profile{ username: user_name.to_string(), bio:bio.map(|s| s.to_string()),
-                                    image:image.map(|s| s.to_string()), following : following };
-                                
-                                result = Some(Article{ 
-                                    slug: slug.to_string(),
-                                    title: title.to_string(),
-                                    description : description.to_string(),
-                                    body : body.to_string(),
-                                    tagList: Vec::new(), //TODO: change
-                                    createdAt: created,
-                                    updatedAt: updated,
-                                    favorited : false,
-                                    favoritesCount : 0,
-                                    author : profile                                    
-                                });
+                                result = get_article_from_row(row);
                                 Ok(())
                             })
                         }
@@ -606,12 +610,24 @@ pub fn login_create_article() -> (std::string::String, std::string::String) {
     let body = format!( r#"{{"article": {{"title": "{}","description": "Ever wonder how?","body": "You have to believe",
                 "tagList": ["reactjs", "angularjs", "dragons"]}}}}"#, title);    
 
-    let res = client.post("http://localhost:6767/api/articles")
+    let mut res = client.post("http://localhost:6767/api/articles")
         .header(Authorization(Bearer {token: jwt.to_owned()}))
         .body(&body)
         .send()
         .unwrap();
+
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+
+    let create_result : CreateArticleResult = serde_json::from_str(&buffer).unwrap();   
+    let article = create_result.article;  
+    assert_eq!(article.title, title); 
+    assert_eq!(article.slug, slug);
+    assert_eq!(article.favorited, false);
+    assert_eq!(article.author.username, user_name);
+
     assert_eq!(res.status, hyper::Ok);
+
     (jwt, slug.to_string())
 }
 
