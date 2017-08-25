@@ -301,6 +301,57 @@ fn get_database_config() -> DatabaseConfig {
     database_config
 }
 
+use hyper::header::{Authorization, Bearer};
+
+#[allow(dead_code)]
+fn process<T>(
+        mut req: Request, 
+        res: Response, 
+        c: Captures, 
+        sql_command : &'static str,
+        sql_select_command : &'static str,
+        get_t_from_row : fn(tiberius::query::QueryRow) -> Option<T>,
+        get_sql_params : fn(i32, Captures, String) ->  &'static[&'static tiberius::ty::ToSql],
+    ) where T: serde::Serialize
+    {
+        let mut body = String::new();
+        let _ = req.read_to_string(&mut body);    
+        let token =  req.headers.get::<Authorization<Bearer>>(); 
+        let logged_id : i32 =  
+            match token {
+                Some(token) => {
+                    let jwt = &token.0.token;
+                    login(&jwt).unwrap()
+
+                }
+                _ => 0
+            };
+
+        println!("logged_id: {}", logged_id);
+
+        let mut result : Option<T> = None; 
+        {
+            let mut sql = Core::new().unwrap();
+            let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+                .and_then(|conn| conn.query(                            
+                    format!("{};{}",sql_command, sql_select_command)
+                    , get_sql_params(logged_id, c, body)
+                ).for_each_row(|row| {
+                    result = get_t_from_row(row);
+                    Ok(())
+                })
+            );
+            sql.run(get_cmd).unwrap(); 
+        }
+
+        if result.is_some() {
+            let result = result.unwrap();
+            let result = serde_json::to_string(&result).unwrap();
+            let result : &[u8] = result.as_bytes();
+            res.send(&result).unwrap();                       
+        }   
+}
+
 mod user;
 use user::*;
  
@@ -313,7 +364,6 @@ use comment::*;
 fn handle_row_no_value(_: tiberius::query::QueryRow) -> tiberius::TdsResult<()> {
     Ok(())
 }
-
 
 #[cfg(test)]
 #[test]
