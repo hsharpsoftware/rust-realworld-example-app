@@ -12,7 +12,9 @@ serde_json = "1.0"
 serde_derive = "1.0.2"
 chrono = { version = "0.4", features = ["serde", "rustc-serialize"] }
 rust-crypto = "*"
-tiberius = { git = "https://github.com/steffengy/tiberius", default-features = true, features = ["chrono"] }
+#tiberius = { git = "https://github.com/steffengy/tiberius", default-features = true, features = ["chrono"] }
+#tiberius = { path = "D:\\S\\tiberius\\tiberius", default-features = true, features = ["chrono"] }
+tiberius = { git = "https://github.com/davidpodhola/tiberius", default-features = true, features = ["chrono"] }
 futures = "*"
 tokio-core = "*"
 toml = "0.4"
