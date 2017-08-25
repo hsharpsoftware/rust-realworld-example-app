@@ -111,6 +111,9 @@ fn get_profile_from_row(row : tiberius::query::QueryRow) ->Option<ProfileResult>
 }
 
 static USER_SELECT : &'static str = r#"SELECT [Email],[Token],[UserName],[Bio],[Image], Id FROM [dbo].[Users] WHERE [Id] = @id"#;
+static PROFILE_SELECT : &'static str = r#"SELECT [Email],[Token],[UserName],[Bio],[Image] ,
+( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @logged ) as Following
+FROM [dbo].[Users]  WHERE [UserName] = @username"#;
 
 pub fn registration_handler(req: Request, res: Response, _: Captures) {
     let (body, _) = prepare_parameters(req);
@@ -174,43 +177,18 @@ pub fn get_current_user_handler(req: Request, res: Response, _: Captures) {
 }
 
 pub fn get_profile_handler(req: Request, res: Response, c: Captures) {
-    let token = req.headers.get::<Authorization<Bearer>>(); 
-    let logged_id : i32 =  
-        match token {
-            Some(token) => {
-                let jwt = &token.0.token;
-                login(&jwt).unwrap()
-
-            }
-            _ => 0
-        };
+    let (_, logged_in_user_id) = prepare_parameters(req);
 
     let caps = c.unwrap();
     let profile = &caps[0].replace("/api/profiles/", "");
     println!("profile: {}", profile);
-    let mut result : Option<ProfileResult> = None; 
 
-    {
-        let mut sql = Core::new().unwrap();
-        let get_profile_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-            .and_then(|conn| conn.query(                            
-                "SELECT [Email],[Token],[UserName],[Bio],[Image] ,
-( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @P2 ) as Following
-FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
-            ).for_each_row(|row| {
-                result = get_profile_from_row(row);
-                Ok(())
-            })
-        );
-        sql.run(get_profile_cmd).unwrap(); 
-    }
-
-    if result.is_some() {
-        let result = result.unwrap();
-        let result = serde_json::to_string(&result).unwrap();
-        let result : &[u8] = result.as_bytes();
-        res.send(&result).unwrap();                        
-    }   
+    process(
+        res,
+        r#"DECLARE @username nvarchar(max) = @P1;DECLARE @logged int = @P2;"#, PROFILE_SELECT,
+        get_profile_from_row,
+        &[&(profile.as_str()), &logged_in_user_id]
+    ); 
 }
 
 pub fn unfollow_handler(req: Request, res: Response, c: Captures) {
