@@ -99,60 +99,28 @@ fn get_article_from_row( row : tiberius::query::QueryRow ) -> Option<CreateArtic
     Some(CreateArticleResult{ article:result })
 }
 
-pub fn create_article_handler(mut req: Request, res: Response, _: Captures) {
-    let mut body = String::new();
-    let _ = req.read_to_string(&mut body);    
-    let token =  req.headers.get::<Authorization<Bearer>>(); 
-    let mut result : Option<CreateArticleResult> = None; 
-    match token {
-        Some(token) => {
-            let jwt = &token.0.token;
-            let logged_in_user_id = login(&jwt);  
+pub fn create_article_handler(req: Request, res: Response, _: Captures) {
+    let (body, logged_in_user_id) = prepare_parameters(req);
+    
+    let create_article : CreateArticle = serde_json::from_str(&body).unwrap();     
+    let title : &str = &create_article.article.title;
+    let description : &str = &create_article.article.description;
+    let body : &str = &create_article.article.body;
+    let tag_list : Vec<String> = create_article.article.tagList.unwrap_or(Vec::new());
+    let slug : &str = &slugify(title);
+    let tags : &str = &tag_list.join(",");
 
-            match logged_in_user_id {
-                Some(logged_in_user_id) => {
-                    println!("logged_in_user {}", &logged_in_user_id);
-
-                    let create_article : CreateArticle = serde_json::from_str(&body).unwrap();     
-                    let title : &str = &create_article.article.title;
-                    let description : &str = &create_article.article.description;
-                    let body : &str = &create_article.article.body;
-                    let tag_list : Vec<String> = create_article.article.tagList.unwrap_or(Vec::new());
-                    let slug : &str = &slugify(title);
-                    let tags : &str = &tag_list.join(",");
-                    
-                    let mut sql = Core::new().unwrap();
-                    let create_article_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-                        .and_then(|conn| { conn.query(                            
-                            format!("insert into Tags (Tag) SELECT EmployeeID = Item FROM dbo.SplitNVarchars(@P6, ',')  Except select Tag from Tags;                            
-                            INSERT INTO Articles (Title, [Description], Body, Created, Author, Slug) Values (@P1, @P2, @P3, getdate(), @P4, @P5);
-                            DECLARE @id int = SCOPE_IDENTITY(); DECLARE @logged int = @P4;
-                            insert into [ArticleTags] (ArticleId, TagId) SELECT @id, Id From Tags WHERE Tag IN (SELECT EmployeeID = Item FROM dbo.SplitNVarchars(@P6, ','));
-                            {}", ARTICLE_SELECT ), 
-                            &[&title, &description, &body, &logged_in_user_id, &slug,&tags,]
-                            )
-                            .for_each_row(|row| {
-                                result = get_article_from_row(row);
-                                Ok(())
-                            })
-                        }
-                    );
-                    sql.run(create_article_cmd).unwrap(); 
-                },
-                _ => {
-                }
-            }
-        }
-        _ => {
-
-        }
-    }
-    if result.is_some() {
-        let result = result.unwrap();
-        let result = serde_json::to_string(&result).unwrap();
-        let result : &[u8] = result.as_bytes();
-        res.send(&result).unwrap();                        
-    }      
+    process(
+        res,
+        r#"insert into Tags (Tag) SELECT EmployeeID = Item FROM dbo.SplitNVarchars(@P6, ',')  Except select Tag from Tags;                            
+        INSERT INTO Articles (Title, [Description], Body, Created, Author, Slug) Values (@P1, @P2, @P3, getdate(), @P4, @P5);
+        DECLARE @id int = SCOPE_IDENTITY(); DECLARE @logged int = @P4;
+        insert into [ArticleTags] (ArticleId, TagId) SELECT @id, Id From Tags WHERE Tag IN (SELECT EmployeeID = Item FROM dbo.SplitNVarchars(@P6, ','));
+        "#, 
+        ARTICLE_SELECT,
+        get_article_from_row,
+        &[&title, &description, &body, &logged_in_user_id, &slug,&tags,]
+    );
 }
 
 fn process_and_return_article(mut req: Request, res: Response, c: Captures, sql_command : &'static str ) {
