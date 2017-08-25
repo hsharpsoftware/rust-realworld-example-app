@@ -136,65 +136,30 @@ pub fn registration_handler(req: Request, res: Response, _: Captures) {
     );
 }
 
-pub fn update_user_handler(mut req: Request, res: Response, _: Captures) {
-    let mut body = String::new();
-    let _ = req.read_to_string(&mut body);    
-    let token =  req.headers.get::<Authorization<Bearer>>(); 
-    let mut result : Option<UserResult> = None; 
-    match token {
-        Some(token) => {
-            let jwt = &token.0.token;
-            let logged_in_user_id = login(&jwt);  
+pub fn update_user_handler(req: Request, res: Response, _: Captures) {
+    let (body, logged_in_user_id) = prepare_parameters(req);
 
-            match logged_in_user_id {
-                Some(logged_in_user_id) => {
-                    println!("logged_in_user {}, received '{}'", &logged_in_user_id, &body);
+    let update_user : UpdateUser = serde_json::from_str(&body).unwrap();     
+    let user_name : &str = &update_user.user.username.as_ref().map(|x| &**x).unwrap_or("");
+    let bio : &str = update_user.user.bio.as_ref().map(|x| &**x).unwrap_or("");
+    let image : &str = update_user.user.image.as_ref().map(|x| &**x).unwrap_or("");
+    let email : &str = &update_user.user.email.as_ref().map(|x| &**x).unwrap_or("");
+    let password : &str = &update_user.user.password.as_ref().map(|x| &**x).unwrap_or("");
+    let token : &str = &crypto::pbkdf2::pbkdf2_simple(password, 10000).unwrap();
 
-                    let update_user : UpdateUser = serde_json::from_str(&body).unwrap();     
-                    let user_name : &str = &update_user.user.username.as_ref().map(|x| &**x).unwrap_or("");
-                    let bio : &str = update_user.user.bio.as_ref().map(|x| &**x).unwrap_or("");
-                    let image : &str = update_user.user.image.as_ref().map(|x| &**x).unwrap_or("");
-                    let email : &str = &update_user.user.email.as_ref().map(|x| &**x).unwrap_or("");
-                    let password : &str = &update_user.user.password.as_ref().map(|x| &**x).unwrap_or("");
-                    let token : &str = &crypto::pbkdf2::pbkdf2_simple(password, 10000).unwrap();
-
-                    let mut sql = Core::new().unwrap();
-                    let update_user_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-                        .and_then(|conn| { conn.query(                            
-                            "  UPDATE [dbo].[Users] SET 
+    process(
+        res,
+        r#"  UPDATE [dbo].[Users] SET 
                                 [UserName]=CASE WHEN(LEN(@P2)=0) THEN UserName ELSE @P2 END,
                                 [Bio]=CASE WHEN(LEN(@P3)=0) THEN Bio ELSE @P3 END,
                                 [Image]=CASE WHEN(LEN(@P4)=0) THEN Image ELSE @P4 END,
                                 [Email]=CASE WHEN(LEN(@P5)=0) THEN Email ELSE @P5 END,
                                 [Token]=CASE WHEN(LEN(@P7)=0) THEN Token ELSE @P6 END
-                                WHERE [Id] = @P1; 
-                            SELECT [Email],[Token],[UserName],[Bio],[Image],Id FROM [dbo].[Users] WHERE [Id] = @P1
-                            ", 
-                            &[&logged_in_user_id, &user_name, &bio, &image, &email, &token, &password ]
-                            )
-                            .for_each_row(|row| {
-                                let (_,_,result2) = get_user_from_row(row);
-                                result = result2;
-                                Ok(())
-                            })
-                        }
-                    );
-                    sql.run(update_user_cmd).unwrap(); 
-                },
-                _ => {
-                }
-            }
-        }
-        _ => {
-
-        }
-    }
-    if result.is_some() {
-        let result = result.unwrap();
-        let result = serde_json::to_string(&result).unwrap();
-        let result : &[u8] = result.as_bytes();
-        res.send(&result).unwrap();                        
-    }      
+                                WHERE [Id] = @P1; DECLARE @id int = @P1;
+                            "#, USER_SELECT,
+        get_user_from_row_simple,
+        &[&logged_in_user_id, &user_name, &bio, &image, &email, &token, &password ]
+    );    
 }
 
 pub fn get_current_user_handler(req: Request, res: Response, _: Captures) {
