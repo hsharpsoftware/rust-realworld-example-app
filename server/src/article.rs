@@ -622,6 +622,7 @@ pub fn login_create_article() -> (std::string::String, std::string::String, std:
     assert_eq!(article.slug, slug);
     assert_eq!(article.favorited, false);
     assert_eq!(article.author.username, user_name);
+    assert_eq!(article.tagList.len(), 3);
 
     assert_eq!(res.status, hyper::Ok);
 
