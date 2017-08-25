@@ -192,86 +192,35 @@ pub fn get_profile_handler(req: Request, res: Response, c: Captures) {
 }
 
 pub fn unfollow_handler(req: Request, res: Response, c: Captures) {
-    let token = req.headers.get::<Authorization<Bearer>>(); 
-    let logged_id : i32 =  
-        match token {
-            Some(token) => {
-                let jwt = &token.0.token;
-                login(&jwt).unwrap()
-
-            }
-            _ => 0
-        };
-
-    let caps = c.unwrap();
-    let profile = &caps[0].replace("/api/profiles/", "").replace("/follow", "");
-    let mut result : Option<ProfileResult> = None; 
-
-    {
-        let mut sql = Core::new().unwrap();
-        let delete_user = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-            .and_then(|conn| conn.query(                            
-                "DELETE TOP (1) from [dbo].[Followings] WHERE [FollowerId] = @P2;
-                SELECT TOP (1) [Email],[Token],[UserName],[Bio],[Image] ,
-( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @P2 ) as Following
-FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
-            )
-            .for_each_row(|row| {
-                result = get_profile_from_row(row);
-                Ok(())
-            })
-        );
-        sql.run(delete_user).unwrap(); 
-    }
-
-    if result.is_some() {
-        let result = result.unwrap();
-        let result = serde_json::to_string(&result).unwrap();
-        let result : &[u8] = result.as_bytes();
-        res.send(&result).unwrap();                        
-    }   
-}
-
-pub fn follow_handler(req: Request, res: Response, c: Captures) {
-    let token = req.headers.get::<Authorization<Bearer>>(); 
-    let logged_id : i32 =  
-        match token {
-            Some(token) => {
-                let jwt = &token.0.token;
-                login(&jwt).unwrap()
-
-            }
-            _ => 0
-        };
+    let (_, logged_in_user_id) = prepare_parameters(req);
 
     let caps = c.unwrap();
     let profile = &caps[0].replace("/api/profiles/", "").replace("/follow", "");
     println!("profile: {}", profile);
-    let mut result : Option<ProfileResult> = None; 
 
-    {
-        let mut sql = Core::new().unwrap();
-        let follow_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-            .and_then(|conn| conn.query(                            
-                "INSERT INTO [dbo].[Followings] ([FollowingId] ,[FollowerId])
-     SELECT @P2,(SELECT TOP (1) [Id]  FROM [Users] where UserName = @P1) EXCEPT SELECT [FollowingId] ,[FollowerId] from Followings;
-                SELECT TOP 1 [Email],[Token],[UserName],[Bio],[Image] ,
-( SELECT COUNT(*) FROM dbo.Followings F WHERE F.[FollowingId] = Id AND F.FollowerId = @P2 ) as Following
-FROM [dbo].[Users]  WHERE [UserName] = @P1", &[&(profile.as_str()), &logged_id]
-            ).for_each_row(|row| {
-                result = get_profile_from_row(row);
-                Ok(())
-            })
-        );
-        sql.run(follow_cmd).unwrap(); 
-    }
+    process(
+        res,
+        r#"DECLARE @username nvarchar(max) = @P1;DECLARE @logged int = @P2;DELETE TOP (1) from [dbo].[Followings] WHERE [FollowerId] = @P2;"#, PROFILE_SELECT,
+        get_profile_from_row,
+        &[&(profile.as_str()), &logged_in_user_id]
+    ); 
+}
 
-    if result.is_some() {
-        let result = result.unwrap();
-        let result = serde_json::to_string(&result).unwrap();
-        let result : &[u8] = result.as_bytes();
-        res.send(&result).unwrap();                        
-    }   
+pub fn follow_handler(req: Request, res: Response, c: Captures) {
+
+    let (_, logged_in_user_id) = prepare_parameters(req);
+
+    let caps = c.unwrap();
+    let profile = &caps[0].replace("/api/profiles/", "").replace("/follow", "");
+    println!("profile: {}", profile);
+
+    process(
+        res,
+        r#"DECLARE @username nvarchar(max) = @P1;DECLARE @logged int = @P2;INSERT INTO [dbo].[Followings] ([FollowingId] ,[FollowerId])
+     SELECT @P2,(SELECT TOP (1) [Id]  FROM [Users] where UserName = @P1) EXCEPT SELECT [FollowingId] ,[FollowerId] from Followings;"#, PROFILE_SELECT,
+        get_profile_from_row,
+        &[&(profile.as_str()), &logged_in_user_id]
+    ); 
 }
 
 
