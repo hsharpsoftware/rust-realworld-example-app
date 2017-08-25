@@ -322,7 +322,6 @@ fn prepare_parameters( mut req: Request ) -> (String, i32) {
     (body, logged_id)
 }
 
-#[allow(dead_code)]
 fn process<'a, T>(
         res: Response, 
         c: Captures, 

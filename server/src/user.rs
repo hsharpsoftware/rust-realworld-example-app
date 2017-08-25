@@ -134,47 +134,6 @@ pub fn registration_handler(mut req: Request, res: Response, c: Captures) {
         get_user_from_row_simple,
         &[ &email, &token, &user_name ]
     );
-
-    return;
-
-    let mut body = String::new();
-    let _ = req.read_to_string(&mut body);    
-    let registration : Registration = serde_json::from_str(&body).unwrap();     
-
-    let email : &str = &registration.user.email;
-    let token : &str = &crypto::pbkdf2::pbkdf2_simple(&registration.user.password, 10000).unwrap();
-    let username : &str = &registration.user.username;
-
-    let mut result : Option<UserResult> = None; 
-    {
-        let mut lp = Core::new().unwrap();
-        let future = SqlConnection::connect(lp.handle(), CONNECTION_STRING.as_str())
-        .and_then(|conn| {
-            conn.query( "
-            INSERT INTO [dbo].[Users]
-                ([Email]
-                ,[Token]
-                ,[UserName])
-            VALUES
-                (@P1
-                ,@P2
-                ,@P3); ; SELECT [Email],[Token],[UserName],[Bio],[Image], Id FROM [dbo].[Users] WHERE [Id] = SCOPE_IDENTITY()" , &[ &email, &token, &username]  )
-            .for_each_row( |row| {
-                                    let (_,_,result2) = get_user_from_row(row);
-                                    result = result2;
-                                    Ok(())
-                }            
-            )
-        } );
-        lp.run(future).unwrap();
-    }
-
-    if result.is_some() {
-        let result = result.unwrap();
-        let result = serde_json::to_string(&result).unwrap();
-        let result : &[u8] = result.as_bytes();
-        res.send(&result).unwrap();                        
-    }        
 }
 
 pub fn update_user_handler(mut req: Request, res: Response, _: Captures) {
