@@ -163,43 +163,14 @@ pub fn update_user_handler(req: Request, res: Response, _: Captures) {
 }
 
 pub fn get_current_user_handler(req: Request, res: Response, _: Captures) {
-    let token = req.headers.get::<Authorization<Bearer>>(); 
-    let mut result : Option<UserResult> = None; 
-    match token {
-        Some(token) => {
-            let jwt = &token.0.token;
-            let logged_in_user = login(&jwt);  
+    let (_, logged_in_user_id) = prepare_parameters(req);
 
-            match logged_in_user {
-                Some(logged_in_user) => {
-                    println!("logged_in_user {}", &logged_in_user);
-                    let mut sql = Core::new().unwrap();
-                    let get_user = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-                        .and_then(|conn| conn.query(                            
-                            "SELECT [Email],[Token],[UserName],[Bio],[Image], Id FROM [dbo].[Users]
-                                WHERE [Id] = @P1", &[&logged_in_user]
-                        ).for_each_row(|row| {
-                            let (_,_,result2) = get_user_from_row(row);
-                            result = result2;
-                            Ok(())
-                        })
-                    );
-                    sql.run(get_user).unwrap(); 
-                },
-                _ => {
-                }
-            }
-        }
-        _ => {
-
-        }
-    }
-    if result.is_some() {
-        let result = result.unwrap();
-        let result = serde_json::to_string(&result).unwrap();
-        let result : &[u8] = result.as_bytes();
-        res.send(&result).unwrap();                        
-    }    
+    process(
+        res,
+        r#"DECLARE @id int = @P1;"#, USER_SELECT,
+        get_user_from_row_simple,
+        &[&logged_in_user_id]
+    ); 
 }
 
 pub fn get_profile_handler(req: Request, res: Response, c: Captures) {
