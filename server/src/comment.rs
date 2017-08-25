@@ -213,7 +213,7 @@ pub fn get_comments_handler(mut req: Request, res: Response, c: Captures) {
 fn add_comment_test() {
     let client = Client::new();
 
-    let (jwt, title) = login_create_article();
+    let (jwt, title, user_name) = login_create_article();
     let url = format!("http://localhost:6767/api/articles/{}/comments", title);
 
     let res = client.post(&url)
@@ -229,7 +229,7 @@ fn add_comment_test() {
 fn delete_comment_test() {
     let client = Client::new();
 
-    let (jwt, title) = login_create_article();
+    let (jwt, title, user_name) = login_create_article();
     let url = format!("http://localhost:6767/api/articles/{}/comments", title);
 
     let mut res = client.post(&url)

@@ -67,6 +67,9 @@ fn get_article_from_row( row : tiberius::query::QueryRow ) -> Option<CreateArtic
     let image : Option<&str> = row.get(8);
     let f : i32 = row.get(9);
     let following : bool = f == 1;
+    let favorites_count: i32 = row.get(10);
+    let personal_favorite_count: i32 = row.get(11);
+    let favorited : bool = personal_favorite_count > 0;
 
     let profile = Profile{ username: user_name.to_string(), bio:bio.map(|s| s.to_string()),
         image:image.map(|s| s.to_string()), following : following };
@@ -80,7 +83,7 @@ fn get_article_from_row( row : tiberius::query::QueryRow ) -> Option<CreateArtic
         createdAt: created,
         updatedAt: updated,
         favorited : false,
-        favoritesCount : 0,
+        favoritesCount : favorites_count,
         author : profile                                    
     };
     Some(CreateArticleResult{ article:result })
@@ -116,7 +119,9 @@ pub fn create_article_handler(mut req: Request, res: Response, _: Captures) {
                             DECLARE @id int = SCOPE_IDENTITY();
                             insert into [ArticleTags] (ArticleId, TagId) SELECT @id, Id From Tags WHERE Tag IN (SELECT EmployeeID = Item FROM dbo.SplitNVarchars(@P6, ','));
                             SELECT Slug, Title, [Description], Body, Created, Updated, Users.UserName, Users.Bio, Users.[Image], 
-                            (SELECT COUNT(*) FROM Followings WHERE FollowerId=@P4 AND Author=FollowingId) as [Following]
+                            (SELECT COUNT(*) FROM Followings WHERE FollowerId=@P4 AND Author=FollowingId) as [Following],
+                            (SELECT COUNT(*) FROM FavoritedArticles WHERE ArticleId = @id ) as FavoritesCount,
+                            (SELECT COUNT(*) FROM FavoritedArticles WHERE UserId = @P4 ) as PersonalFavoritesCount
                             FROM Articles INNER JOIN Users on Author=Users.Id WHERE Articles.Id  = @id
                             ", 
                             &[&title, &description, &body, &logged_in_user_id, &slug,&tags,]
@@ -596,7 +601,7 @@ pub fn delete_article_handler(mut req: Request, res: Response, c: Captures) {
 use rand::Rng;
 
 #[cfg(test)]
-pub fn login_create_article() -> (std::string::String, std::string::String) {
+pub fn login_create_article() -> (std::string::String, std::string::String, std::string::String) {
     let client = Client::new();
 
     let ( user_name, email ) = register_jacob();
@@ -628,7 +633,7 @@ pub fn login_create_article() -> (std::string::String, std::string::String) {
 
     assert_eq!(res.status, hyper::Ok);
 
-    (jwt, slug.to_string())
+    (jwt, slug.to_string(), user_name)
 }
 
 #[cfg(test)]
@@ -642,14 +647,24 @@ fn create_article_test() {
 fn favorite_article_test() {
     let client = Client::new();
 
-    let (jwt, title) = login_create_article();
-    let url = format!("http://localhost:6767/api/articles/{}/favorite", title);
+    let (jwt, slug, user_name) = login_create_article();
+    let url = format!("http://localhost:6767/api/articles/{}/favorite", slug);
 
-    let res = client.post(&url)
+    let mut res = client.post(&url)
         .header(Authorization(Bearer {token: jwt}))
-        .body("")
         .send()
         .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+        
+
+    let create_result : CreateArticleResult = serde_json::from_str(&buffer).unwrap();   
+    let article = create_result.article;  
+    assert_eq!(article.slug, slug);
+    assert_eq!(article.favorited, true);
+    assert_eq!(article.favoritesCount, 1);
+    assert_eq!(article.author.username, user_name);
+
     assert_eq!(res.status, hyper::Ok);
 }
 
@@ -658,7 +673,7 @@ fn favorite_article_test() {
 fn unfavorite_article_test() {
     let client = Client::new();
 
-    let (jwt, title) = login_create_article();
+    let (jwt, title, user_name) = login_create_article();
     let url = format!("http://localhost:6767/api/articles/{}/favorite", title);
 
     let res = client.delete(&url)
@@ -674,7 +689,7 @@ fn unfavorite_article_test() {
 fn get_article_test() {
     let client = Client::new();
 
-    let (jwt, title) = login_create_article();
+    let (jwt, title, user_name) = login_create_article();
     let url = format!("http://localhost:6767/api/articles/{}", title);
 
     let res = client.get(&url)
@@ -689,7 +704,7 @@ fn get_article_test() {
 fn list_article_test() {
     let client = Client::new();
 
-    let (jwt, title) = login_create_article();
+    let (jwt, title, user_name) = login_create_article();
 
     let res = client.get("http://localhost:6767/api/articles?tag=dragons")
         .body("")
@@ -703,7 +718,7 @@ fn list_article_test() {
 fn update_article_test() {
     let client = Client::new();
 
-    let (jwt, title) = login_create_article();
+    let (jwt, title, user_name) = login_create_article();
     let url = format!("http://localhost:6767/api/articles/{}", title);
     let title2 = title + " NOT";
     let body = format!(r#"{{"article": {{"title": "{}","description": "Ever wonder what mistakes you did?","body": "You have to believe he's not going to eat you."}}}}"#, title2);
@@ -721,7 +736,7 @@ fn update_article_test() {
 fn delete_article_test() {
     let client = Client::new();
 
-    let (jwt, title) = login_create_article();
+    let (jwt, title, user_name) = login_create_article();
     let url = format!("http://localhost:6767/api/articles/{}", title);
 
     let res = client.delete(&url)
