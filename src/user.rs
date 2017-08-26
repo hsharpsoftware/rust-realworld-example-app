@@ -332,10 +332,10 @@ pub fn login_jacob( email : std::string::String, password : String ) -> std::str
 }
 
 #[cfg(test)]
-fn follow_jacob() -> (std::string::String, std::string::String) {
+pub fn follow_jacob() -> (std::string::String, std::string::String, std::string::String) {
     let client = Client::new();
     let ( user_name, email ) = register_jacob();
-    let jwt = login_jacob( email, JACOB_PASSWORD.to_string() );
+    let jwt = login_jacob( email.to_owned(), JACOB_PASSWORD.to_string() );
     let url = format!("http://localhost:6767/api/profiles/{}/follow", user_name);
     println!("url:{}", url);
 
@@ -354,7 +354,7 @@ fn follow_jacob() -> (std::string::String, std::string::String) {
 
     assert_eq!(res.status, hyper::Ok);
 
-    (user_name, jwt)
+    (user_name, email, jwt)
 }
 
 #[cfg(test)]
@@ -506,7 +506,7 @@ fn profile_logged_test() {
 fn unfollow_test() {
     let client = Client::new();
 
-    let (user_name, jwt) = follow_jacob();
+    let (user_name, _, jwt) = follow_jacob();
     let url = format!("http://localhost:6767/api/profiles/{}/follow", user_name);
 
     let mut res = client.delete(&url)

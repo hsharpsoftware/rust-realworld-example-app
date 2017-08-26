@@ -24,11 +24,6 @@ extern crate futures_state_stream;
 
 extern crate slug;
 
-use futures::Future;
-use tokio_core::reactor::Core;
-use tiberius::{SqlConnection};
-use tiberius::stmt::ResultStreamExt;
-
 use chrono::prelude::*;
 
 use reroute::{Captures};
@@ -141,7 +136,7 @@ use rand::Rng;
 fn add_comment_test() {
     let client = Client::new();
 
-    let (jwt, slug, user_name) = login_create_article();
+    let (jwt, slug, user_name) = login_create_article(false);
     let url = format!("http://localhost:6767/api/articles/{}/comments", slug);
 
     let comment_body = format!("His name was my name too {}-{}.", since_the_epoch(), rand::thread_rng().gen_range(0, 1000));
@@ -179,7 +174,7 @@ fn add_comment_test() {
 fn delete_comment_test() {
     let client = Client::new();
 
-    let (jwt, slug, _) = login_create_article();
+    let (jwt, slug, _) = login_create_article(false);
     let url = format!("http://localhost:6767/api/articles/{}/comments", slug);
 
     let mut res = client.post(&url)

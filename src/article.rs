@@ -143,10 +143,49 @@ pub fn unfavorite_article_handler(req: Request, res: Response, c: Captures) {
                 ");
 }
 
-pub fn feed_handler(mut req: Request, res: Response, c: Captures) {
+fn articles_result( _ : ArticlesResult ) {}
+
+pub fn feed_handler(req: Request, res: Response, c: Captures) {
     let (_, logged_id) = prepare_parameters( req );
 
-    
+    let caps = c.unwrap();
+    let url_params = &caps[0].replace("/api/articles/feed?", "");
+
+    println!("feed_handler url_params:'{}'", url_params);
+
+    let parsed_params: Vec<&str> = url_params.split('&').collect();
+
+    let mut limit :i32 = 20;
+    let mut offset :i32 = 0;
+
+    for param in &parsed_params {
+        let name_value: Vec<&str> = param.split('=').collect();
+
+        if name_value[0] == "offset" {
+            offset = name_value[1].parse::<i32>().unwrap();
+        }
+        else if name_value[0] == "limit" {
+            limit = name_value[1].parse::<i32>().unwrap();
+        }
+        ;
+    }    
+
+    process_container(
+        res,
+        r#"declare @logged int = @p1;
+        "#,
+        r#"SELECT Slug, Title, [Description], Body, Created, Updated, Users.UserName, Users.Bio, Users.[Image], 
+                (SELECT COUNT(*) FROM Followings WHERE FollowerId=@logged AND Author=FollowingId) as [Following],
+                (SELECT COUNT(*) FROM FavoritedArticles WHERE ArticleId = Articles.Id ) as FavoritesCount,
+                (SELECT COUNT(*) FROM FavoritedArticles WHERE UserId = @logged ) as PersonalFavoritesCount,
+				(SELECT STRING_AGG(Tag, ',') FROM [Tags] inner join ArticleTags on ArticleTags.TagId = Tags.Id where ArticleId=Articles.Id)  as Tags
+                FROM Articles INNER JOIN Users on Author=Users.Id  
+				WHERE Author IN ( SELECT FollowingId FROM Followings WHERE FollowerId = @logged ) 
+order by Articles.Id DESC OFFSET @p2 ROWS FETCH NEXT @p3 ROWS Only"#,
+        get_simple_article_from_row,
+        articles_result,
+        &[&logged_id, &offset, &limit]
+    );
 }
 
 pub fn list_article_handler(mut req: Request, res: Response, c: Captures) {
@@ -155,6 +194,8 @@ pub fn list_article_handler(mut req: Request, res: Response, c: Captures) {
 
     let caps = c.unwrap();
     let url_params = &caps[0].replace("/api/articles?", "");
+
+    println!("list_article_handler url_params:'{}'", url_params);
 
     let parsed_params: Vec<&str> = url_params.split('&').collect();
 
@@ -313,11 +354,17 @@ pub fn delete_article_handler(req: Request, res: Response, c: Captures) {
 use rand::Rng;
 
 #[cfg(test)]
-pub fn login_create_article() -> (std::string::String, std::string::String, std::string::String) {
+pub fn login_create_article(follow:bool) -> (std::string::String, std::string::String, std::string::String) {
     let client = Client::new();
 
-    let ( user_name, email ) = register_jacob();
-    let jwt = login_jacob( email, user::JACOB_PASSWORD.to_string() );    
+    let ( user_name, _, jwt ) = 
+        if follow { 
+            user::follow_jacob() 
+        } else { 
+            let ( user_name, email ) = register_jacob() ;
+            let jwt = login_jacob( email.to_owned(), user::JACOB_PASSWORD.to_string() );  
+            ( user_name, email, jwt )
+        };
 
     let since = since_the_epoch();
     let num = rand::thread_rng().gen_range(0, 1000);    
@@ -352,7 +399,7 @@ pub fn login_create_article() -> (std::string::String, std::string::String, std:
 #[cfg(test)]
 #[test]
 fn create_article_test() {
-    login_create_article();
+    login_create_article(false);
 }
 
 #[cfg(test)]
@@ -360,7 +407,7 @@ fn create_article_test() {
 fn favorite_article_test() {
     let client = Client::new();
 
-    let (jwt, slug, user_name) = login_create_article();
+    let (jwt, slug, user_name) = login_create_article(false);
     let url = format!("http://localhost:6767/api/articles/{}/favorite", slug);
 
     let mut res = client.post(&url)
@@ -385,7 +432,7 @@ fn favorite_article_test() {
 fn unfavorite_article_test() {
     let client = Client::new();
 
-    let (jwt, slug, user_name) = login_create_article();
+    let (jwt, slug, user_name) = login_create_article(false);
     let url = format!("http://localhost:6767/api/articles/{}/favorite", slug);
 
     let mut res = client.delete(&url)
@@ -411,7 +458,7 @@ fn unfavorite_article_test() {
 fn get_article_test() {
     let client = Client::new();
 
-    let (_, slug, user_name) = login_create_article();
+    let (_, slug, user_name) = login_create_article(false);
     let url = format!("http://localhost:6767/api/articles/{}", slug);
 
     let mut res = client.get(&url)
@@ -436,7 +483,7 @@ fn get_article_test() {
 fn list_article_test() {
     let client = Client::new();
 
-    let (_, _, _) = login_create_article();
+    let (_, _, _) = login_create_article(false);
 
     let mut res = client.get("http://localhost:6767/api/articles?tag=dragons")
         .body("")
@@ -453,10 +500,50 @@ fn list_article_test() {
 
 #[cfg(test)]
 #[test]
+fn unfollowed_feed_article_test() {
+    let client = Client::new();
+
+    let (jwt, _, _) = login_create_article(false);
+
+    let mut res = client.get("http://localhost:6767/api/articles/feed")
+        .header(Authorization(Bearer {token: jwt}))
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+
+    let articles : ArticlesResult = serde_json::from_str(&buffer).unwrap();       
+    assert_eq!(articles.articles.len()==0, true);
+}
+
+#[cfg(test)]
+#[test]
+fn followed_feed_article_test() {
+    let client = Client::new();
+
+    let (jwt, _, _) = login_create_article(true);
+
+    let mut res = client.get("http://localhost:6767/api/articles/feed")
+        .header(Authorization(Bearer {token: jwt}))
+        .send()
+        .unwrap();
+    assert_eq!(res.status, hyper::Ok);
+
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+
+    let articles : ArticlesResult = serde_json::from_str(&buffer).unwrap();       
+    assert_eq!(articles.articles.len()==1, true);
+}
+
+#[cfg(test)]
+#[test]
 fn update_article_test() {
     let client = Client::new();
 
-    let (jwt, title, user_name) = login_create_article();
+    let (jwt, title, user_name) = login_create_article(false);
     let url = format!("http://localhost:6767/api/articles/{}", title);
     let title2 = title + " NOT";
     let body = format!(r#"{{"article": {{"title": "{}","description": "CHANGED1","body": "CHANGED2"}}}}"#, title2);
@@ -485,7 +572,7 @@ fn update_article_test() {
 fn delete_article_test() {
     let client = Client::new();
 
-    let (jwt, title, _) = login_create_article();
+    let (jwt, title, _) = login_create_article(false);
     let url = format!("http://localhost:6767/api/articles/{}", title);
 
     let res = client.delete(&url)

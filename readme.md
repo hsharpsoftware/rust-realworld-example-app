@@ -31,7 +31,9 @@ Install Rust: [https://www.rustup.rs/](https://www.rustup.rs/)
 
 Get [Microsoft SQL Server **2017+**](https://www.microsoft.com/en-us/sql-server/sql-server-2017). SQL Express Edition is OK (when released), Azure SQL Database is OK, LocalDB does **NOT** work. Make sure TCP is enabled on the Server (enabled in Azure SQL by default, disabled by default on local installations).
 
-Copy `conduit - sample.tom`l to `conduit.toml` and set your connection string there. Please note the connection encryption must adhere to crate configuration in Cargo.toml see [Tiberius documentation on Encryption](https://github.com/steffengy/tiberius#encryption-tlsssl). Default Cargo.toml configuration works for Azure SQL ([encrypted](https://docs.microsoft.com/en-us/azure/sql-database/sql-database-security-overview); if using please make sure you add your local IP address to the firewall rules).
+On the desired Microsoft SQL Server run `database.sql` script to create database `Conduit` and all the tables, functions etc.
+
+Copy `conduit - sample.toml` to `conduit.toml` and set your connection string there. Please note the connection encryption must adhere to crate configuration in Cargo.toml see [Tiberius documentation on Encryption](https://github.com/steffengy/tiberius#encryption-tlsssl). Default Cargo.toml configuration works for Azure SQL ([encrypted](https://docs.microsoft.com/en-us/azure/sql-database/sql-database-security-overview); if using please make sure you add your local IP address to the firewall rules).
 
 Build locally with integration tests:
 
