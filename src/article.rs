@@ -50,7 +50,7 @@ static ARTICLE_SELECT : &'static str = r#"
                 FROM Articles INNER JOIN Users on Author=Users.Id  WHERE Articles.Id = @id
 "#;
 
-fn get_article_from_row( row : tiberius::query::QueryRow ) -> Option<CreateArticleResult> {
+fn get_simple_article_from_row( row : tiberius::query::QueryRow ) -> Option<Article> {
     let slug : &str = row.get(0);
     let title : &str = row.get(1);
     let description : &str = row.get(2);
@@ -82,9 +82,11 @@ fn get_article_from_row( row : tiberius::query::QueryRow ) -> Option<CreateArtic
         favoritesCount : favorites_count,
         author : profile                                    
     };
-    Some(CreateArticleResult{ article:result })
+    Some(result)
 }
-
+fn get_article_from_row( row : tiberius::query::QueryRow ) -> Option<CreateArticleResult> {
+    Some(CreateArticleResult{ article:get_simple_article_from_row(row).unwrap() })
+}
 pub fn create_article_handler(req: Request, res: Response, _: Captures) {
     let (body, logged_in_user_id) = prepare_parameters(req);
     
@@ -126,7 +128,6 @@ fn process_and_return_article(name : &str, req: Request, res: Response, c: Captu
     ); 
 }
 
-
 pub fn favorite_article_handler(req: Request, res: Response, c: Captures) {
     process_and_return_article("favorite_article_handler", req, res, c, "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1 ORDER BY 1; DECLARE @logged int = @P2;
                 INSERT INTO [dbo].[FavoritedArticles]
@@ -144,6 +145,8 @@ pub fn unfavorite_article_handler(req: Request, res: Response, c: Captures) {
 
 pub fn feed_handler(mut req: Request, res: Response, c: Captures) {
     let (_, logged_id) = prepare_parameters( req );
+
+    
 }
 
 pub fn list_article_handler(mut req: Request, res: Response, c: Captures) {

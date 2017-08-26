@@ -385,7 +385,7 @@ fn process_container<'a, T, U>(
         sql_command : &'static str,
         sql_select_command : &'static str,
         get_t_from_row : fn(tiberius::query::QueryRow) -> Option<T>,
-        fix_U: fn(result:U),
+        fix_u: fn(result:U),
         sql_params : &'a[&'a tiberius::ty::ToSql],
     ) where T: serde::Serialize, U : Container<T>, U: serde::Serialize {
     let mut items : Vec<T>  = Vec::new();
@@ -405,7 +405,7 @@ fn process_container<'a, T, U>(
     }
 
     let result = U::create_new_with_items(items);
-
+    fix_u(result);
     let result = serde_json::to_string(&result).unwrap();
     let result : &[u8] = result.as_bytes();
     res.send(&result).unwrap();                       
