@@ -36,7 +36,8 @@ use reroute::{Captures};
 use super::*;
 
 static COMMENT_SELECT : &'static str = r#"
-  select Comments.Id, createdAt, body,  Users.UserName, Users.Bio, Users.[Image] 
+  select Comments.Id, createdAt, body,  Users.UserName, Users.Bio, Users.[Image], 
+  (SELECT COUNT(*) FROM Followings WHERE FollowerId=@logged AND Author=FollowingId) as [Following]
   from Comments inner join Users ON Users.Id = Comments.Author where Comments.Id = @commentid
 "#;
 
@@ -47,7 +48,9 @@ fn get_simple_comment_from_row( row : tiberius::query::QueryRow ) -> Option<Comm
     let user_name : &str = row.get(3);
     let bio : Option<&str> = row.get(4);
     let image : Option<&str> = row.get(5);
-    let profile = Profile{ username:user_name.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:false };
+    let f : i32 = row.get(6);
+    let following : bool = f == 1;    
+    let profile = Profile{ username:user_name.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:following };
     let comment = Comment{ 
         id:id, createdAt:created_at, updatedAt:created_at,
         body:body.to_string(), author: profile
@@ -118,12 +121,15 @@ pub fn get_comments_handler(req: Request, res: Response, c: Captures) {
 
     process_container(
         res,
-        "declare @id int; select top 1 @id = id from Articles where Slug = @p1 ORDER BY 1;",
-        r#"select Comments.Id, createdAt, body,  Users.UserName, Users.Bio, Users.[Image] 
+        r#"declare @id int; select top 1 @id = id from Articles where Slug = @p1 ORDER BY 1;
+        declare @logged int = @p2;
+        "#,
+        r#"select Comments.Id, createdAt, body,  Users.UserName, Users.Bio, Users.[Image],
+        (SELECT COUNT(*) FROM Followings WHERE FollowerId=@logged AND Author=FollowingId) as [Following]
                 from Comments inner join Users ON Users.Id = Comments.Author where ArticleId = @id"#,
         get_simple_comment_from_row,
         comments_result,
-        &[&(slug.as_str()),]
+        &[&(slug.as_str()),&logged_id]
     );
 }
 
