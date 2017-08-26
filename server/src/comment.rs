@@ -76,7 +76,7 @@ fn get_comment_from_row( row : tiberius::query::QueryRow ) -> Option<CommentResu
     result    
 }    
 
-pub fn add_comment_handler(mut req: Request, res: Response, c: Captures) {
+pub fn add_comment_handler(req: Request, res: Response, c: Captures) {
     let (body, logged_id) = prepare_parameters(req);
 
     let add_comment : AddComment = serde_json::from_str(&body).unwrap(); 
@@ -101,40 +101,25 @@ pub fn add_comment_handler(mut req: Request, res: Response, c: Captures) {
 }
 
 
-pub fn delete_comment_handler(mut req: Request, res: Response, c: Captures) {
-    let mut body = String::new();
-    let _ = req.read_to_string(&mut body);   
+pub fn delete_comment_handler(req: Request, res: Response, c: Captures) {
+    let (_, logged_id) = prepare_parameters(req);   
 
     let caps = c.unwrap();
     let url_params = &caps[0];
-    let slug = "aaa";
     let id = url_params.split("/").last().unwrap();
     println!("url_params: {}",url_params);
-    println!("slug: {}", slug);
     println!("id: {}", id);
 
-    let mut result : Option<Article> = None; 
-    {
-        let mut sql = Core::new().unwrap();
-        let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-            .and_then(|conn| conn.query(                            
-                "DELETE TOP(1) FROM Comments WHERE Id = @P1;
-                SELECT 1; 
-               ", &[&id]
-            ).for_each_row(|row| {
-                let _ : i32 = row.get(0);
-                Ok(())
-            })
-        );
-        sql.run(get_cmd).unwrap(); 
-    }
+    process(
+        res,
+        r#"DELETE TOP(1) FROM Comments WHERE Id = @P1 AND Author=@P2;
+        "#, 
+        "SELECT 1",
+        handle_row_none,
+        &[&id, &logged_id]
+    );
 
-    if result.is_some() {
-        let result = result.unwrap();
-        let result = serde_json::to_string(&result).unwrap();
-        let result : &[u8] = result.as_bytes();
-        res.send(&result).unwrap();                        
-    }   
+    return;
 }
 
 pub fn get_comments_handler(mut req: Request, res: Response, c: Captures) {    
