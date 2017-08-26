@@ -32,24 +32,10 @@ use tiberius::stmt::Statement;
 
 use chrono::prelude::*;
 
-use std::error::Error;
-use std::fs::File;
 use std::io::prelude::*;
-use std::env;
-use std::path::PathBuf;
 
-use hyper::server::{Server, Request, Response};
-use reroute::{RouterBuilder, Captures};
-use hyper::header::{Authorization, Bearer};
-use hyper::status::StatusCode;
-
-use crypto::sha2::Sha256;
-
-use jwt::{
-    Header,
-    Registered,
-    Token,
-};
+use hyper::server::{Request, Response};
+use reroute::{Captures};
 
 use slug::slugify;
 
@@ -222,7 +208,7 @@ pub fn list_article_handler(mut req: Request, res: Response, c: Captures) {
 
     let sql_command: Statement = Statement::from(select_clause);
 
-    let mut result : Vec<Article> = Vec::new(); 
+    let mut articles : Vec<Article> = Vec::new(); 
     {
         let mut sql = Core::new().unwrap();
         let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
@@ -245,19 +231,17 @@ pub fn list_article_handler(mut req: Request, res: Response, c: Captures) {
                 let art = Article{ 
                     slug:slug.to_string(), title:title.to_string(), description:description.to_string(), body:body.to_string(), tagList:tag_list, createdAt:created_at, updatedAt:updated_at, favorited:favorited, favoritesCount:favorites_count, author:author
                 };
-                result.push(art);
+                articles.push(art);
                 Ok(())
             })
         );
         sql.run(get_cmd).unwrap(); 
     }
 
-    if result.len() > 0 {
-        //let result = result.unwrap();
-        let result = serde_json::to_string(&result).unwrap();
-        let result : &[u8] = result.as_bytes();
-        res.send(&result).unwrap();                        
-    }   
+    let result = ArticlesResult{articles:articles};
+    let result = serde_json::to_string(&result).unwrap();
+    let result : &[u8] = result.as_bytes();
+    res.send(&result).unwrap();                        
 }
 
 pub fn get_article_handler(req: Request, res: Response, c: Captures) {
@@ -420,7 +404,7 @@ fn unfavorite_article_test() {
 fn get_article_test() {
     let client = Client::new();
 
-    let (jwt, slug, user_name) = login_create_article();
+    let (_, slug, user_name) = login_create_article();
     let url = format!("http://localhost:6767/api/articles/{}", slug);
 
     let mut res = client.get(&url)
@@ -445,13 +429,19 @@ fn get_article_test() {
 fn list_article_test() {
     let client = Client::new();
 
-    let (jwt, title, user_name) = login_create_article();
+    let (_, _, _) = login_create_article();
 
-    let res = client.get("http://localhost:6767/api/articles?tag=dragons")
+    let mut res = client.get("http://localhost:6767/api/articles?tag=dragons")
         .body("")
         .send()
         .unwrap();
     assert_eq!(res.status, hyper::Ok);
+
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+
+    let articles : ArticlesResult = serde_json::from_str(&buffer).unwrap();       
+    assert_eq!(articles.articles.len()>0, true);
 }
 
 #[cfg(test)]
@@ -488,7 +478,7 @@ fn update_article_test() {
 fn delete_article_test() {
     let client = Client::new();
 
-    let (jwt, title, user_name) = login_create_article();
+    let (jwt, title, _) = login_create_article();
     let url = format!("http://localhost:6767/api/articles/{}", title);
 
     let res = client.delete(&url)

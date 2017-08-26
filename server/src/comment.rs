@@ -28,30 +28,10 @@ use futures::Future;
 use tokio_core::reactor::Core;
 use tiberius::{SqlConnection};
 use tiberius::stmt::ResultStreamExt;
-use tiberius::stmt::Statement;
 
 use chrono::prelude::*;
 
-use std::error::Error;
-use std::fs::File;
-use std::io::prelude::*;
-use std::env;
-use std::path::PathBuf;
-
-use hyper::server::{Server, Request, Response};
-use reroute::{RouterBuilder, Captures};
-use hyper::header::{Authorization, Bearer};
-use hyper::status::StatusCode;
-
-use crypto::sha2::Sha256;
-
-use jwt::{
-    Header,
-    Registered,
-    Token,
-};
-
-use slug::slugify;
+use reroute::{Captures};
 
 use super::*;
 
@@ -129,9 +109,7 @@ pub fn get_comments_handler(req: Request, res: Response, c: Captures) {
     let slug = &caps[0].replace("/api/articles/", "").replace("/comments", "");
     println!("get_comments_handler slug: '{}'", slug);
 
-    let mut result : Option<CommentsResult> = None; 
     let mut comments : Vec<Comment>  = Vec::new();
-
     {
         let mut sql = Core::new().unwrap();
         let follow_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
@@ -159,7 +137,7 @@ pub fn get_comments_handler(req: Request, res: Response, c: Captures) {
         sql.run(follow_cmd).unwrap(); 
     }
     	
-    result = Some(CommentsResult{comments:comments});
+    let result = Some(CommentsResult{comments:comments});
 
     if result.is_some() {
         let result = result.unwrap();
@@ -215,7 +193,7 @@ fn add_comment_test() {
 fn delete_comment_test() {
     let client = Client::new();
 
-    let (jwt, slug, user_name) = login_create_article();
+    let (jwt, slug, _) = login_create_article();
     let url = format!("http://localhost:6767/api/articles/{}/comments", slug);
 
     let mut res = client.post(&url)

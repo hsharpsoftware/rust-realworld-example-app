@@ -366,8 +366,7 @@ fn registration_test() {
 #[cfg(test)]
 #[test]
 fn login_test() {
-    let client = Client::new();
-    let ( user_name, email ) = register_jacob();
+    let ( _, email ) = register_jacob();
     login_jacob( email, JACOB_PASSWORD.to_string() );
 }
 
@@ -437,7 +436,7 @@ fn get_current_user_fail_test() {
     res.read_to_string(&mut buffer).unwrap(); 
 
     let registration : UserResult = serde_json::from_str(&buffer).unwrap();   
-    let registered_user = registration.user;  
+    let _ = registration.user;  
     assert_eq!(res.status, hyper::Ok);
 }
 
@@ -446,8 +445,7 @@ fn get_current_user_fail_test() {
 #[test]
 #[should_panic]
 fn login_fail_test() {
-    let client = Client::new();
-    let ( user_name, email ) = register_jacob();
+    let ( _, email ) = register_jacob();
     login_jacob( email, JACOB_PASSWORD.to_string() + "!" );
 }
 
@@ -455,7 +453,7 @@ fn login_fail_test() {
 #[test]
 fn profile_unlogged_test() {
     let client = Client::new();
-    let ( user_name, email ) = register_jacob();
+    let ( user_name, _ ) = register_jacob();
     let url = format!("http://localhost:6767/api/profiles/{}", user_name);
 
     let mut res = client.get(&url)

@@ -88,6 +88,13 @@ struct Article {
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
+#[allow(non_snake_case)]
+struct ArticlesResult {
+    articles: Vec<Article>
+}
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
 struct UpdateArticle {
     article: UpdateArticleDetail
 }
