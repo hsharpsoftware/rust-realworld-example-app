@@ -89,6 +89,12 @@ struct Article {
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
 struct UpdateArticle {
+    article: UpdateArticleDetail
+}
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
+struct UpdateArticleDetail {
     title: Option<String>,
     description : Option<String>,
     body : Option<String>

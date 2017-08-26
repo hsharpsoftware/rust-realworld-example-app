@@ -267,134 +267,35 @@ pub fn get_article_handler(req: Request, res: Response, c: Captures) {
         DECLARE @logged int = @P2;");              
 }
 
-pub fn update_article_handler(mut req: Request, res: Response, c: Captures) {
-    let mut body = String::new();
-    let _ = req.read_to_string(&mut body);    
-    let token = req.headers.get::<Authorization<Bearer>>(); 
-    let mut result : Option<User> = None; 
+pub fn update_article_handler(req: Request, res: Response, c: Captures) {
+    let (body, logged_id) = prepare_parameters(req);
 
     let caps = c.unwrap();
     let slug = &caps[0].replace("/api/articles/", "");
     println!("slug {}", &slug);
 
-    match token {
-        Some(token) => {
-            let jwt = &token.0.token;
-            let logged_in_user_id = login(&jwt);  
+    let update_article : UpdateArticle = serde_json::from_str(&body).unwrap();     
+    let title : &str = update_article.article.title.as_ref().map(|x| &**x).unwrap_or("");
+    let body : &str = update_article.article.body.as_ref().map(|x| &**x).unwrap_or("");
+    let description : &str = update_article.article.description.as_ref().map(|x| &**x).unwrap_or("");
+    let new_slug : &str = &slugify(title);
 
-            match logged_in_user_id {
-                Some(logged_in_user_id) => {
-                    println!("logged_in_user {}", &logged_in_user_id);
-                    println!("body {}", &body);
-
-                    let update_article : UpdateArticle = serde_json::from_str(&body).unwrap();     
-                    let title : Option<String> = update_article.title;
-                    let body : Option<String> = update_article.body;
-                    let description : Option<String> = update_article.description;
-                    
-                    if title.is_some() {
-                        let t = &title.unwrap();
-                        let mut sql = Core::new().unwrap();
-                        let s = slugify(t);
-
-                        let update_user_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-                        .and_then(|conn| { conn.query(                            
-                            "UPDATE TOP(1) [dbo].[Articles] SET [Title]=@P1, [Slug]=@P2 WHERE [Slug] = @P3; 
-                                SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
-                                INNER JOIN Users u ON a.Author = u.Id
-                                where Slug = @P2;", 
-                                &[&(t.as_str()), &(s.as_str()), &(slug.as_str())]
-                            )
-                            .for_each_row(|row| {
-                                let email : &str = row.get(0);
-                                let token : &str = row.get(1);
-                                let user_name : &str = row.get(2);
-                                let bio : Option<&str> = row.get(3);
-                                let image : Option<&str> = row.get(4);
-                                result = Some(User{ 
-                                    email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
-                                    image:image.map(|s| s.to_string()), username:user_name.to_string()
-                                });
-                                Ok(())
-                            })
-                        }
-                    );
-                    sql.run(update_user_cmd).unwrap(); 
-                    }
-
-                    if body.is_some() {
-                        let t = body.unwrap();
-                        let mut sql = Core::new().unwrap();
-
-                        let update_user_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-                        .and_then(|conn| { conn.query(                            
-                            "UPDATE TOP(1) [dbo].[Articles] SET [Body]=@P1 WHERE [Slug] = @P2; 
-                                SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
-                                INNER JOIN Users u ON a.Author = u.Id
-                                where Slug = @P2;", 
-                                &[&(t.as_str()), &(slug.as_str())]
-                            )
-                            .for_each_row(|row| {
-                                let email : &str = row.get(0);
-                                let token : &str = row.get(1);
-                                let user_name : &str = row.get(2);
-                                let bio : Option<&str> = row.get(3);
-                                let image : Option<&str> = row.get(4);
-                                result = Some(User{ 
-                                    email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
-                                    image:image.map(|s| s.to_string()), username:user_name.to_string()
-                                });
-                                Ok(())
-                            })
-                        }
-                    );
-                    sql.run(update_user_cmd).unwrap(); 
-                    }
-
-                    if description.is_some() {
-                        let t = description.unwrap();
-                        let mut sql = Core::new().unwrap();
-
-                        let update_user_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-                        .and_then(|conn| { conn.query(                            
-                            "UPDATE TOP(1) [dbo].[Articles] SET [Description]=@P1 WHERE [Slug] = @P2; 
-                                SELECT TOP 1 Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a 
-                                INNER JOIN Users u ON a.Author = u.Id
-                                where Slug = @P2;", 
-                                &[&(t.as_str()), &(slug.as_str())]
-                            )
-                            .for_each_row(|row| {
-                                let email : &str = row.get(0);
-                                let token : &str = row.get(1);
-                                let user_name : &str = row.get(2);
-                                let bio : Option<&str> = row.get(3);
-                                let image : Option<&str> = row.get(4);
-                                result = Some(User{ 
-                                    email:email.to_string(), token:token.to_string(), bio:bio.map(|s| s.to_string()),
-                                    image:image.map(|s| s.to_string()), username:user_name.to_string()
-                                });
-                                Ok(())
-                            })
-                        }
-                    );
-                    sql.run(update_user_cmd).unwrap(); 
-                    }
-
-                },
-                _ => {
-                }
-            }
-        }
-        _ => {
-
-        }
-    }
-    if result.is_some() {
-        let result = result.unwrap();
-        let result = serde_json::to_string(&result).unwrap();
-        let result : &[u8] = result.as_bytes();
-        res.send(&result).unwrap();                        
-    }      
+    process(
+        res,
+        r#"
+        declare @id int; select TOP(1) @id = id from Articles where Slug = @P1; 
+        DECLARE @logged int = @P5;
+        UPDATE TOP(1) [dbo].[Articles] SET 
+        [Title]=CASE WHEN(LEN(@P2)=0) THEN Title ELSE @P2 END,
+        [Description]=CASE WHEN(LEN(@P3)=0) THEN Description ELSE @P3 END,
+        [Body]=CASE WHEN(LEN(@P4)=0) THEN Description ELSE @P4 END,
+        [Slug]=CASE WHEN(LEN(@P2)=0) THEN [Slug] ELSE @P6 END
+        WHERE [Id] = @id AND Author = @logged; 
+        "#, 
+        ARTICLE_SELECT,
+        get_article_from_row,
+        &[&(slug.as_str()), &title, &description, &body, &logged_id, &new_slug]
+    );
 }
 
 pub fn delete_article_handler(req: Request, res: Response, c: Captures) {
@@ -478,7 +379,6 @@ fn favorite_article_test() {
     let mut buffer = String::new();
     res.read_to_string(&mut buffer).unwrap(); 
         
-
     let create_result : CreateArticleResult = serde_json::from_str(&buffer).unwrap();   
     let article = create_result.article;  
     assert_eq!(article.slug, slug);
@@ -494,14 +394,24 @@ fn favorite_article_test() {
 fn unfavorite_article_test() {
     let client = Client::new();
 
-    let (jwt, title, user_name) = login_create_article();
-    let url = format!("http://localhost:6767/api/articles/{}/favorite", title);
+    let (jwt, slug, user_name) = login_create_article();
+    let url = format!("http://localhost:6767/api/articles/{}/favorite", slug);
 
-    let res = client.delete(&url)
+    let mut res = client.delete(&url)
         .header(Authorization(Bearer {token: jwt}))
         .body("")
         .send()
         .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+        
+    let create_result : CreateArticleResult = serde_json::from_str(&buffer).unwrap();   
+    let article = create_result.article;  
+    assert_eq!(article.slug, slug);
+    assert_eq!(article.favorited, false);
+    assert_eq!(article.favoritesCount, 0);
+    assert_eq!(article.author.username, user_name);
+
     assert_eq!(res.status, hyper::Ok);
 }
 
@@ -522,7 +432,7 @@ fn get_article_test() {
 
     let create_result : CreateArticleResult = serde_json::from_str(&buffer).unwrap();   
     let article = create_result.article;  
-    assert_eq!(article.slug, slug);
+    assert_eq!(article.slug, slug);    
     assert_eq!(article.favorited, false);
     assert_eq!(article.favoritesCount, 0);
     assert_eq!(article.author.username, user_name);
@@ -552,14 +462,25 @@ fn update_article_test() {
     let (jwt, title, user_name) = login_create_article();
     let url = format!("http://localhost:6767/api/articles/{}", title);
     let title2 = title + " NOT";
-    let body = format!(r#"{{"article": {{"title": "{}","description": "Ever wonder what mistakes you did?","body": "You have to believe he's not going to eat you."}}}}"#, title2);
+    let body = format!(r#"{{"article": {{"title": "{}","description": "CHANGED1","body": "CHANGED2"}}}}"#, title2);
 
-    let res = client.put(&url)
+    let mut res = client.put(&url)
         .header(Authorization(Bearer {token: jwt}))
         .body(&body)
         .send()
         .unwrap();
-    assert_eq!(res.status, hyper::Ok);
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+
+    let create_result : CreateArticleResult = serde_json::from_str(&buffer).unwrap();   
+    let article = create_result.article;
+    assert_eq!(article.slug, slugify(title2.to_owned()));
+    assert_eq!(article.title, title2);
+    assert_eq!(article.description, "CHANGED1");
+    assert_eq!(article.body, "CHANGED2");
+    assert_eq!(article.favorited, false);
+    assert_eq!(article.favoritesCount, 0);
+    assert_eq!(article.author.username, user_name);
 }
 
 #[cfg(test)]
