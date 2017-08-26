@@ -365,6 +365,11 @@ fn handle_row_no_value(_: tiberius::query::QueryRow) -> tiberius::TdsResult<()> 
     Ok(())
 }
 
+fn handle_row_none(_: tiberius::query::QueryRow) -> Option<i32>
+{
+    None
+}
+
 #[cfg(test)]
 #[test]
 fn get_tags_test() {

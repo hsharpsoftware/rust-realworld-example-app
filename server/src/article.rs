@@ -123,50 +123,25 @@ pub fn create_article_handler(req: Request, res: Response, _: Captures) {
     );
 }
 
-fn process_and_return_article(mut req: Request, res: Response, c: Captures, sql_command : &'static str ) {
-    let mut body = String::new();
-    let _ = req.read_to_string(&mut body);    
-    let token =  req.headers.get::<Authorization<Bearer>>(); 
-    let logged_id : i32 =  
-        match token {
-            Some(token) => {
-                let jwt = &token.0.token;
-                login(&jwt).unwrap()
-
-            }
-            _ => 0
-        };
-
+fn process_and_return_article(req: Request, res: Response, c: Captures, sql_command : &'static str ) {
+    let (_, logged_id) = prepare_parameters( req );
+    
     let caps = c.unwrap();
     let slug = &caps[0].replace("/api/articles/", "").replace("/favorite", "");
     println!("slug: {}", slug);
     println!("logged_id: {}", logged_id);
 
-    let mut result : Option<CreateArticleResult> = None; 
-    {
-        let mut sql = Core::new().unwrap();
-        let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-            .and_then(|conn| conn.query(                            
-                format!("{};{}",sql_command, ARTICLE_SELECT)
-                , &[&(slug.as_str()), &(logged_id)]
-            ).for_each_row(|row| {
-                result = get_article_from_row(row);
-                Ok(())
-            })
-        );
-        sql.run(get_cmd).unwrap(); 
-    }
-
-    if result.is_some() {
-        let result = result.unwrap();
-        let result = serde_json::to_string(&result).unwrap();
-        let result : &[u8] = result.as_bytes();
-        res.send(&result).unwrap();                        
-    }   
+    process(
+        res,
+        sql_command,
+        ARTICLE_SELECT,
+        get_article_from_row,
+        &[&(slug.as_str()), &(logged_id)]
+    ); 
 }
 
 
-pub fn favorite_article_handler(mut req: Request, res: Response, c: Captures) {
+pub fn favorite_article_handler(req: Request, res: Response, c: Captures) {
     process_and_return_article(req, res, c, "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1 ORDER BY 1; DECLARE @logged int = @P2;
                 INSERT INTO [dbo].[FavoritedArticles]
 	            ([ArticleId],
@@ -174,7 +149,7 @@ pub fn favorite_article_handler(mut req: Request, res: Response, c: Captures) {
 	            VALUES (@id,@P2)");              
 }
 
-pub fn unfavorite_article_handler(mut req: Request, res: Response, c: Captures) {
+pub fn unfavorite_article_handler(req: Request, res: Response, c: Captures) {
     process_and_return_article(req, res, c, "declare @id int; DECLARE @logged int = @P2;
                 select TOP(1) @id = id from Articles where Slug = @P1 ORDER BY 1;
                 DELETE TOP(1) FROM FavoritedArticles WHERE ArticleId = @id AND UserId = @P2;
@@ -285,8 +260,11 @@ pub fn list_article_handler(mut req: Request, res: Response, c: Captures) {
     }   
 }
 
-pub fn get_article_handler(mut req: Request, res: Response, c: Captures) {
-    process_and_return_article(req, res, c, "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1 ORDER BY 1; DECLARE @logged int = @P2;");              
+pub fn get_article_handler(req: Request, res: Response, c: Captures) {
+    process_and_return_article(
+        req, res, c, 
+        "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1 ORDER BY 1; 
+        DECLARE @logged int = @P2;");              
 }
 
 pub fn update_article_handler(mut req: Request, res: Response, c: Captures) {
@@ -419,40 +397,24 @@ pub fn update_article_handler(mut req: Request, res: Response, c: Captures) {
     }      
 }
 
-pub fn delete_article_handler(mut req: Request, res: Response, c: Captures) {
-    let mut body = String::new();
-    let _ = req.read_to_string(&mut body);   
-
-    let token =  req.headers.get::<Authorization<Bearer>>(); 
-    let logged_id : i32 =  
-        match token {
-            Some(token) => {
-                let jwt = &token.0.token;
-                login(&jwt).unwrap()
-
-            }
-            _ => 0
-        };
+pub fn delete_article_handler(req: Request, res: Response, c: Captures) {
+    let (_, logged_id) = prepare_parameters( req );
 
     let caps = c.unwrap();
     let slug = &caps[0].replace("/api/articles/", "");
     println!("slug: {}", slug);
 
-    let mut sql = Core::new().unwrap();
-    let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-        .and_then(|conn| conn.query(                            
-            "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1 AND Author = @P2 ORDER BY 1; 
-            DELETE FROM Comments WHERE ArticleId = @id;
-            DELETE FROM FavoritedArticles WHERE ArticleId = @id;
-            DELETE FROM ArticleTags WHERE ArticleId = @id;
-            DELETE FROM Articles WHERE id = @id AND Author = @P2;
-            SELECT 1; 
-            ", &[&(slug.as_str()),&(logged_id)]
-        ).for_each_row(|row| {
-            Ok(())
-        })
+    process(
+        res,
+        "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1 AND Author = @P2 ORDER BY 1; 
+        DELETE FROM Comments WHERE ArticleId = @id;
+        DELETE FROM FavoritedArticles WHERE ArticleId = @id;
+        DELETE FROM ArticleTags WHERE ArticleId = @id;
+        DELETE FROM Articles WHERE id = @id AND Author = @P2;",
+        "SELECT 1",
+        handle_row_none,
+        &[&(slug.as_str()),&(logged_id)]
     );
-    sql.run(get_cmd).unwrap(); 
 }
 
 #[cfg(test)]
