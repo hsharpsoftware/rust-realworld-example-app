@@ -60,6 +60,10 @@ pub fn since_the_epoch() -> u64 {
 #[cfg(test)]
 use hyper::Client;
 
+trait Container<T> {
+    fn create_new_with_items(Vec<T>) -> Self;
+}
+
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
 struct User {
@@ -92,6 +96,12 @@ struct Article {
 struct ArticlesResult {
     articles: Vec<Article>
 }
+
+impl Container<Article> for ArticlesResult {
+    fn create_new_with_items( articles: Vec<Article> ) -> ArticlesResult {
+        ArticlesResult{articles:articles}
+    }
+} 
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
@@ -365,6 +375,36 @@ fn process<'a, T>(
         }   
 }
 
+fn process_container<'a, T, U>(
+        res: Response, 
+        sql_command : &'static str,
+        sql_select_command : &'static str,
+        get_t_from_row : fn(tiberius::query::QueryRow) -> Option<T>,
+        sql_params : &'a[&'a tiberius::ty::ToSql],
+    ) where T: serde::Serialize, U : Container<T>, U: serde::Serialize {
+    let mut items : Vec<T>  = Vec::new();
+    {
+        let mut sql = Core::new().unwrap();
+        let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
+            .and_then(|conn| conn.query(                            
+                format!("{};{}",sql_command, sql_select_command)
+                , sql_params
+            ).for_each_row(|row| {
+                let item = get_t_from_row(row);
+                if item.is_some() { items.push(item.unwrap()); }
+                Ok(())
+            })
+        );
+        sql.run(get_cmd).unwrap(); 
+    }
+
+    let result = U::create_new_with_items(items);
+
+    let result = serde_json::to_string(&result).unwrap();
+    let result : &[u8] = result.as_bytes();
+    res.send(&result).unwrap();                       
+}
+
 mod user;
 use user::*;
  
@@ -481,6 +521,7 @@ fn main() {
     builder.put(r"/api/articles/.*", update_article_handler);   
     builder.delete(r"/api/articles/.*/comments/.*", delete_comment_handler);  
     builder.delete(r"/api/articles/.*", delete_article_handler);  
+    builder.get(r"/api/articles/feed", feed_handler);  
     builder.get(r"/api/articles/.*/comments", get_comments_handler);  
     builder.get(r"/api/articles/.*", get_article_handler);  
     builder.get(r"/api/articles?.*", list_article_handler); 

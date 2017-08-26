@@ -142,6 +142,10 @@ pub fn unfavorite_article_handler(req: Request, res: Response, c: Captures) {
                 ");
 }
 
+pub fn feed_handler(mut req: Request, res: Response, c: Captures) {
+    let (_, logged_id) = prepare_parameters( req );
+}
+
 pub fn list_article_handler(mut req: Request, res: Response, c: Captures) {
     let mut body = String::new();
     let _ = req.read_to_string(&mut body); 
