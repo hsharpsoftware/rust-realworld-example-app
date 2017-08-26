@@ -1,6 +1,41 @@
-How to setup build with tests
-========================
+# ![RealWorld Example App](logo.png)
 
-1. Get a Microsoft SQL Server **2017+**. SQL Express Edition is OK (when released), Azure SQL Database is OK, LocalDB does **NOT** work.
-    * if you want to get SQL Express installed on the default instance (meaning you will not have to include the instance name), you can use this [Chocolatey](chocolatey.org) command `choco install sql-server-express -ia "/IACCEPTSQLSERVERLICENSETERMS /Q /ACTION=install /INSTANCEID=MSSQLSERVER /INSTANCENAME=MSSQLSERVER /UPDATEENABLED=FALSE" -o -y`
-2. Configure the crates
+[![Build status](https://ci.appveyor.com/api/projects/status/8s17p2vh2f4e8a2y?svg=true)](https://ci.appveyor.com/project/davidpodhola/rust-realworld-example-app)
+
+> ### Rust codebase containing real world examples (CRUD, auth, advanced patterns, etc) that adheres to the [RealWorld](https://github.com/gothinkster/realworld-example-apps) spec and API.
+
+
+### [RealWorld](https://github.com/gothinkster/realworld)
+
+
+This codebase was created to demonstrate a fully fledged fullstack application built with [Rust fast HTTP implementation Hyper](https://hyper.rs/) in including CRUD operations, authentication, routing, pagination, and more.
+
+We've gone to great lengths to adhere to the [Rust community styleguides & best practices](https://aturon.github.io/README.html).
+
+For more information on how to this works with other frontends/backends, head over to the [RealWorld](https://github.com/gothinkster/realworld) repo.
+
+
+# How it works
+
+This is an application written in [Rust](https://www.rust-lang.org/en-US/index.html) using these crates:
+
+- [Hyper](https://hyper.rs/) - a fast HTTP implementation written in and for Rust
+- [Tiberius](https://github.com/steffengy/tiberius) - Microsoft SQL Server async Rust driver written in Rust
+- [Serde](https://serde.rs/) - a framework for serializing and deserializing Rust data structures efficiently and generically
+- [Reroute](https://github.com/gsquire/reroute) - A router for Rust's hyper framework using regular expressions
+- [IIS](https://github.com/hsharpsoftware/rust-web-iis) - Set of helper functions for running web server written in Rust on Internet Information Services (IIS) 
+
+# Getting started
+
+Install Rust: [https://www.rustup.rs/](https://www.rustup.rs/)
+
+Get [Microsoft SQL Server **2017+**](https://www.microsoft.com/en-us/sql-server/sql-server-2017). SQL Express Edition is OK (when released), Azure SQL Database is OK, LocalDB does **NOT** work.
+
+Build locally with integration tests:
+
+- `./locbld.cmd`
+
+Or run locally:
+- `./run.cmd`
+
+API URL: `http://localhost:6767`
