@@ -55,64 +55,49 @@ use slug::slugify;
 
 use super::*;
 
+static COMMENT_SELECT : &'static str = r#"
+  select Comments.Id, createdAt, body,  Users.UserName, Users.Bio, Users.[Image] 
+  from Comments, Users where Comments.Id = @commentid and Users.Id = @logged
+"#;
+
+fn get_comment_from_row( row : tiberius::query::QueryRow ) -> Option<CommentResult> {
+    let id : i32 = row.get(0);
+    let created_at : NaiveDateTime = row.get(1);
+    let body : &str = row.get(2);
+    let user_name : &str = row.get(3);
+    let bio : Option<&str> = row.get(4);
+    let image : Option<&str> = row.get(5);
+    let profile = Profile{ username:user_name.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:false };
+    let comment = Comment{ 
+        id:id, createdAt:created_at, updatedAt:created_at,
+        body:body.to_string(), author: profile
+    };
+    let result = Some(CommentResult{comment:comment});
+    result    
+}    
+
 pub fn add_comment_handler(mut req: Request, res: Response, c: Captures) {
-    let mut body = String::new();
-    let _ = req.read_to_string(&mut body);    
+    let (body, logged_id) = prepare_parameters(req);
+
     let add_comment : AddComment = serde_json::from_str(&body).unwrap(); 
-    let comment_body = add_comment.comment.body;
+    let comment_body : &str = &add_comment.comment.body;
     println!("comment_body: {}", comment_body);
     
-    let token =  req.headers.get::<Authorization<Bearer>>(); 
-    let logged_id : i32 =  
-        match token {
-            Some(token) => {
-                let jwt = &token.0.token;
-                login(&jwt).unwrap()
-
-            }
-            _ => 0
-        };
-
     let caps = c.unwrap();
     let slug = &caps[0].replace("/api/articles/", "").replace("/comments", "");
     println!("slug: {}", slug);
 
-    let mut result : Option<CommentResult> = None; 
-
-    {
-        let mut sql = Core::new().unwrap();
-        let follow_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-            .and_then(|conn| conn.query(                            
-                "declare @id int; select top 1 @id = id from Articles where Slug = @p1 ORDER BY 1; 
-                insert into Comments (createdAt, body, ArticleId, Author ) values (getdate(), @p3, @id, @p2);
-                select Comments.Id, createdAt, body,  Users.UserName, Users.Bio, Users.[Image] 
-                from Comments, Users where Comments.Id = SCOPE_IDENTITY() and Users.Id = @p2
-                ", &[&(slug.as_str()), &logged_id, &(comment_body.as_str()) ]
-            ).for_each_row(|row| {
-                let id : i32 = row.get(0);
-                let created_at : NaiveDateTime = row.get(1);
-                let body : &str = row.get(2);
-                let user_name : &str = row.get(3);
-                let bio : Option<&str> = row.get(4);
-                let image : Option<&str> = row.get(5);
-                let profile = Profile{ username:user_name.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:false };
-                let comment = Comment{ 
-                    id:id, createdAt:created_at, updatedAt:created_at,
-                    body:body.to_string(), author: profile
-                };
-                result = Some(CommentResult{comment:comment});
-                Ok(())
-            })
-        );
-        sql.run(follow_cmd).unwrap(); 
-    }
-
-    if result.is_some() {
-        let result = result.unwrap();
-        let result = serde_json::to_string(&result).unwrap();
-        let result : &[u8] = result.as_bytes();
-        res.send(&result).unwrap();                        
-    }   
+    process(
+        res,
+        r#"declare @id int; select top 1 @id = id from Articles where Slug = @p1 ORDER BY 1; 
+          DECLARE @logged int = @P2;
+          insert into Comments (createdAt, body, ArticleId, Author ) values (getdate(), @p3, @id, @logged);
+          declare @commentid int = SCOPE_IDENTITY(); 
+        "#, 
+        COMMENT_SELECT,
+        get_comment_from_row,
+        &[&(slug.as_str()), &logged_id, &comment_body, ]
+    );
 }
 
 
@@ -209,18 +194,32 @@ pub fn get_comments_handler(mut req: Request, res: Response, c: Captures) {
 }
 
 #[cfg(test)]
+use rand::Rng;
+
+#[cfg(test)]
 #[test]
 fn add_comment_test() {
     let client = Client::new();
 
-    let (jwt, title, user_name) = login_create_article();
-    let url = format!("http://localhost:6767/api/articles/{}/comments", title);
+    let (jwt, slug, user_name) = login_create_article();
+    let url = format!("http://localhost:6767/api/articles/{}/comments", slug);
 
-    let res = client.post(&url)
+    let comment_body = format!("His name was my name too {}-{}.", since_the_epoch(), rand::thread_rng().gen_range(0, 1000));
+    let body = format!(r#"{{"comment": {{"body": "{}" }}}}"#, comment_body); 
+
+    let mut res = client.post(&url)
         .header(Authorization(Bearer {token: jwt}))
-        .body(r#"{"comment": {"body": "His name was my name too."}}"#)
+        .body(&body)
         .send()
         .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+
+    let create_result : CommentResult = serde_json::from_str(&buffer).unwrap();   
+    let comment = create_result.comment;  
+    assert_eq!(comment.body, comment_body); 
+    assert_eq!(comment.author.username,user_name);
+
     assert_eq!(res.status, hyper::Ok);
 }
 
@@ -229,8 +228,8 @@ fn add_comment_test() {
 fn delete_comment_test() {
     let client = Client::new();
 
-    let (jwt, title, user_name) = login_create_article();
-    let url = format!("http://localhost:6767/api/articles/{}/comments", title);
+    let (jwt, slug, user_name) = login_create_article();
+    let url = format!("http://localhost:6767/api/articles/{}/comments", slug);
 
     let mut res = client.post(&url)
         .header(Authorization(Bearer {token: jwt.to_owned()}))
@@ -245,7 +244,7 @@ fn delete_comment_test() {
     let comment_result : CommentResult = serde_json::from_str(&buffer).unwrap();
     println!("Comment result:{:?}", comment_result);
 
-    let url2 = format!("http://localhost:6767/api/articles/{}/comments/{}", title, comment_result.comment.id);
+    let url2 = format!("http://localhost:6767/api/articles/{}/comments/{}", slug, comment_result.comment.id);
 
     let mut res = client.delete(&url2)
         .header(Authorization(Bearer {token: jwt}))
