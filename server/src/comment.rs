@@ -57,7 +57,7 @@ use super::*;
 
 static COMMENT_SELECT : &'static str = r#"
   select Comments.Id, createdAt, body,  Users.UserName, Users.Bio, Users.[Image] 
-  from Comments, Users where Comments.Id = @commentid and Users.Id = @logged
+  from Comments inner join Users ON Users.Id = Comments.Author where Comments.Id = @commentid
 "#;
 
 fn get_comment_from_row( row : tiberius::query::QueryRow ) -> Option<CommentResult> {
@@ -85,7 +85,7 @@ pub fn add_comment_handler(req: Request, res: Response, c: Captures) {
     
     let caps = c.unwrap();
     let slug = &caps[0].replace("/api/articles/", "").replace("/comments", "");
-    println!("slug: {}", slug);
+    println!("add_comment_handler slug: '{}'", slug);
 
     process(
         res,
@@ -107,7 +107,7 @@ pub fn delete_comment_handler(req: Request, res: Response, c: Captures) {
     let caps = c.unwrap();
     let url_params = &caps[0];
     let id = url_params.split("/").last().unwrap();
-    println!("url_params: {}",url_params);
+    println!("delete_comment_handler url_params: {}",url_params);
     println!("id: {}", id);
 
     process(
@@ -122,21 +122,12 @@ pub fn delete_comment_handler(req: Request, res: Response, c: Captures) {
     return;
 }
 
-pub fn get_comments_handler(mut req: Request, res: Response, c: Captures) {    
-    let token =  req.headers.get::<Authorization<Bearer>>(); 
-    let logged_id : i32 =  
-        match token {
-            Some(token) => {
-                let jwt = &token.0.token;
-                login(&jwt).unwrap()
-
-            }
-            _ => 0
-        };
+pub fn get_comments_handler(req: Request, res: Response, c: Captures) {    
+    let (_, logged_id) = prepare_parameters(req);   
 
     let caps = c.unwrap();
     let slug = &caps[0].replace("/api/articles/", "").replace("/comments", "");
-    println!("slug: {}", slug);
+    println!("get_comments_handler slug: '{}'", slug);
 
     let mut result : Option<CommentsResult> = None; 
     let mut comments : Vec<Comment>  = Vec::new();
@@ -193,7 +184,7 @@ fn add_comment_test() {
     let body = format!(r#"{{"comment": {{"body": "{}" }}}}"#, comment_body); 
 
     let mut res = client.post(&url)
-        .header(Authorization(Bearer {token: jwt}))
+        .header(Authorization(Bearer {token: jwt.to_owned()}))
         .body(&body)
         .send()
         .unwrap();
@@ -206,6 +197,17 @@ fn add_comment_test() {
     assert_eq!(comment.author.username,user_name);
 
     assert_eq!(res.status, hyper::Ok);
+
+    let mut res = client.get(&url)
+        .header(Authorization(Bearer {token: jwt}))
+        .body(&body)
+        .send()
+        .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+    
+    let comments : CommentsResult = serde_json::from_str(&buffer).unwrap(); 
+    assert_eq!(comments.comments.len(), 1); 
 }
 
 #[cfg(test)]

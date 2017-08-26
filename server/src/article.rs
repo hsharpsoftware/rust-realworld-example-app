@@ -123,12 +123,12 @@ pub fn create_article_handler(req: Request, res: Response, _: Captures) {
     );
 }
 
-fn process_and_return_article(req: Request, res: Response, c: Captures, sql_command : &'static str ) {
+fn process_and_return_article(name : &str, req: Request, res: Response, c: Captures, sql_command : &'static str ) {
     let (_, logged_id) = prepare_parameters( req );
     
     let caps = c.unwrap();
     let slug = &caps[0].replace("/api/articles/", "").replace("/favorite", "");
-    println!("slug: {}", slug);
+    println!("{} slug: '{}'", name, slug);
     println!("logged_id: {}", logged_id);
 
     process(
@@ -142,7 +142,7 @@ fn process_and_return_article(req: Request, res: Response, c: Captures, sql_comm
 
 
 pub fn favorite_article_handler(req: Request, res: Response, c: Captures) {
-    process_and_return_article(req, res, c, "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1 ORDER BY 1; DECLARE @logged int = @P2;
+    process_and_return_article("favorite_article_handler", req, res, c, "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1 ORDER BY 1; DECLARE @logged int = @P2;
                 INSERT INTO [dbo].[FavoritedArticles]
 	            ([ArticleId],
 	            [UserId])
@@ -150,7 +150,7 @@ pub fn favorite_article_handler(req: Request, res: Response, c: Captures) {
 }
 
 pub fn unfavorite_article_handler(req: Request, res: Response, c: Captures) {
-    process_and_return_article(req, res, c, "declare @id int; DECLARE @logged int = @P2;
+    process_and_return_article("unfavorite_article_handler", req, res, c, "declare @id int; DECLARE @logged int = @P2;
                 select TOP(1) @id = id from Articles where Slug = @P1 ORDER BY 1;
                 DELETE TOP(1) FROM FavoritedArticles WHERE ArticleId = @id AND UserId = @P2;
                 ");
@@ -262,7 +262,7 @@ pub fn list_article_handler(mut req: Request, res: Response, c: Captures) {
 
 pub fn get_article_handler(req: Request, res: Response, c: Captures) {
     process_and_return_article(
-        req, res, c, 
+        "get_article_handler", req, res, c, 
         "declare @id int; select TOP(1) @id = id from Articles where Slug = @P1 ORDER BY 1; 
         DECLARE @logged int = @P2;");              
 }

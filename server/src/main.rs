@@ -472,11 +472,11 @@ fn main() {
     builder.post(r"/api/articles/.*/favorite", favorite_article_handler);  
     builder.delete(r"/api/articles/.*/favorite", unfavorite_article_handler);
     builder.put(r"/api/articles/.*", update_article_handler);   
-    builder.get(r"/api/articles/.*", get_article_handler);  
-    builder.get(r"/api/articles?.*", list_article_handler); 
     builder.delete(r"/api/articles/.*/comments/.*", delete_comment_handler);  
     builder.delete(r"/api/articles/.*", delete_article_handler);  
-    builder.get(r"/api/articles/.*/comments/.*", get_comments_handler);  
+    builder.get(r"/api/articles/.*/comments", get_comments_handler);  
+    builder.get(r"/api/articles/.*", get_article_handler);  
+    builder.get(r"/api/articles?.*", list_article_handler); 
 
     let router = builder.finalize().unwrap(); 
 
