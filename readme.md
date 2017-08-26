@@ -28,3 +28,6 @@ For more information on how to this works with other frontends/backends, head ov
 
 > npm install, npm start, etc.
 
+1. Get a Microsoft SQL Server **2017+**. SQL Express Edition is OK (when released), Azure SQL Database is OK, LocalDB does **NOT** work.
+    * if you want to get SQL Express installed on the default instance (meaning you will not have to include the instance name), you can use this [Chocolatey](chocolatey.org) command `choco install sql-server-express -ia "/IACCEPTSQLSERVERLICENSETERMS /Q /ACTION=install /INSTANCEID=MSSQLSERVER /INSTANCENAME=MSSQLSERVER /UPDATEENABLED=FALSE" -o -y`
+2. Configure the crates
