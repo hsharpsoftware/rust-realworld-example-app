@@ -40,7 +40,7 @@ static COMMENT_SELECT : &'static str = r#"
   from Comments inner join Users ON Users.Id = Comments.Author where Comments.Id = @commentid
 "#;
 
-fn get_comment_from_row( row : tiberius::query::QueryRow ) -> Option<CommentResult> {
+fn get_simple_comment_from_row( row : tiberius::query::QueryRow ) -> Option<Comment> {
     let id : i32 = row.get(0);
     let created_at : NaiveDateTime = row.get(1);
     let body : &str = row.get(2);
@@ -52,7 +52,12 @@ fn get_comment_from_row( row : tiberius::query::QueryRow ) -> Option<CommentResu
         id:id, createdAt:created_at, updatedAt:created_at,
         body:body.to_string(), author: profile
     };
-    let result = Some(CommentResult{comment:comment});
+    Some(comment)
+}
+
+
+fn get_comment_from_row( row : tiberius::query::QueryRow ) -> Option<CommentResult> {
+    let result = Some(CommentResult{comment:get_simple_comment_from_row(row).unwrap()});
     result    
 }    
 
@@ -102,6 +107,8 @@ pub fn delete_comment_handler(req: Request, res: Response, c: Captures) {
     return;
 }
 
+fn comments_result( _ : CommentsResult ) {}
+
 pub fn get_comments_handler(req: Request, res: Response, c: Captures) {    
     let (_, logged_id) = prepare_parameters(req);   
 
@@ -109,42 +116,15 @@ pub fn get_comments_handler(req: Request, res: Response, c: Captures) {
     let slug = &caps[0].replace("/api/articles/", "").replace("/comments", "");
     println!("get_comments_handler slug: '{}'", slug);
 
-    let mut comments : Vec<Comment>  = Vec::new();
-    {
-        let mut sql = Core::new().unwrap();
-        let follow_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-            .and_then(|conn| conn.query(                            
-                "declare @id int; select top 1 @id = id from Articles where Slug = @p1 ORDER BY 1; 
-                select Comments.Id, createdAt, body,  Users.UserName, Users.Bio, Users.[Image] 
-                from Comments inner join Users ON Users.Id = Comments.Author where ArticleId = @id
-                ", &[&(slug.as_str()), &logged_id ]
-            ).for_each_row(|row| {
-                let id : i32 = row.get(0);
-                let created_at : NaiveDateTime = row.get(1);
-                let body : &str = row.get(2);
-                let user_name : &str = row.get(3);
-                let bio : Option<&str> = row.get(4);
-                let image : Option<&str> = row.get(5);
-                let profile = Profile{ username:user_name.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:false };
-                let comment = Comment{ 
-                    id:id, createdAt:created_at, updatedAt:created_at,
-                    body:body.to_string(), author: profile
-                };
-                comments.push(comment);
-                Ok(())
-            })
-        );
-        sql.run(follow_cmd).unwrap(); 
-    }
-    	
-    let result = Some(CommentsResult{comments:comments});
-
-    if result.is_some() {
-        let result = result.unwrap();
-        let result = serde_json::to_string(&result).unwrap();
-        let result : &[u8] = result.as_bytes();
-        res.send(&result).unwrap();                        
-    }   
+    process_container(
+        res,
+        "declare @id int; select top 1 @id = id from Articles where Slug = @p1 ORDER BY 1;",
+        r#"select Comments.Id, createdAt, body,  Users.UserName, Users.Bio, Users.[Image] 
+                from Comments inner join Users ON Users.Id = Comments.Author where ArticleId = @id"#,
+        get_simple_comment_from_row,
+        comments_result,
+        &[&(slug.as_str()),]
+    );
 }
 
 #[cfg(test)]

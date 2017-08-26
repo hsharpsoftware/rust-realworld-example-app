@@ -157,6 +157,11 @@ struct CommentsResult {
     comments: Vec<Comment>,
 }
 
+impl Container<Comment> for CommentsResult {
+    fn create_new_with_items( comments: Vec<Comment> ) -> CommentsResult {
+        CommentsResult{comments:comments}
+    }
+} 
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
@@ -380,6 +385,7 @@ fn process_container<'a, T, U>(
         sql_command : &'static str,
         sql_select_command : &'static str,
         get_t_from_row : fn(tiberius::query::QueryRow) -> Option<T>,
+        fix_U: fn(result:U),
         sql_params : &'a[&'a tiberius::ty::ToSql],
     ) where T: serde::Serialize, U : Container<T>, U: serde::Serialize {
     let mut items : Vec<T>  = Vec::new();
