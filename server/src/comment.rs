@@ -241,5 +241,14 @@ fn delete_comment_test() {
     let mut buffer = String::new();
     res.read_to_string(&mut buffer).unwrap(); 
     assert_eq!(res.status, hyper::Ok);
+
+    let mut res = client.get(&url)
+        .send()
+        .unwrap();
+    let mut buffer = String::new();
+    res.read_to_string(&mut buffer).unwrap(); 
+    
+    let comments : CommentsResult = serde_json::from_str(&buffer).unwrap(); 
+    assert_eq!(comments.comments.len(), 0);     
 }
 
