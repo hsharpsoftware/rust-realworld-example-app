@@ -1,32 +1,5 @@
-# ![RealWorld Example App](logo.png)
-
-[![Build status](https://ci.appveyor.com/api/projects/status/8s17p2vh2f4e8a2y?svg=true)](https://ci.appveyor.com/project/davidpodhola/rust-realworld-example-app)
-
-> ### Rust codebase containing real world examples (CRUD, auth, advanced patterns, etc) that adheres to the [RealWorld](https://github.com/gothinkster/realworld-example-apps) spec and API.
-
-
-### [Demo](https://rust-nickel-azure-web-app.azurewebsites.net/)&nbsp;&nbsp;&nbsp;&nbsp;[RealWorld](https://github.com/gothinkster/realworld)
-
-
-This codebase was created to demonstrate a fully fledged fullstack application built with **[YOUR_FRAMEWORK]** including CRUD operations, authentication, routing, pagination, and more.
-
-We've gone to great lengths to adhere to the **[YOUR_FRAMEWORK]** community styleguides & best practices.
-
-For more information on how to this works with other frontends/backends, head over to the [RealWorld](https://github.com/gothinkster/realworld) repo.
-
-
-# How it works
-
-> Describe the general architecture of your app here
-> Test with
-> 
-> - [http://127.0.0.1:6767/](http://127.0.0.1:6767/) or [https://rust-nickel-azure-web-app.azurewebsites.net/](https://rust-nickel-azure-web-app.azurewebsites.net/)
-> - [http://127.0.0.1:6767/api/test1/123](http://127.0.0.1:6767/api/test1/123) or [https://rust-nickel-azure-web-app.azurewebsites.net/api/test1/123](https://rust-nickel-azure-web-app.azurewebsites.net/api/test1/123)
-> - [http://127.0.0.1:6767/api/test2/507c7f79bcf86cd7994f6c0e](http://127.0.0.1:6767/api/test2/507c7f79bcf86cd7994f6c0e) or [https://rust-nickel-azure-web-app.azurewebsites.net/api/test2/507c7f79bcf86cd7994f6c0e](https://rust-nickel-azure-web-app.azurewebsites.net/api/test2/507c7f79bcf86cd7994f6c0e)
-
-# Getting started
-
-> npm install, npm start, etc.
+How to setup build with tests
+========================
 
 1. Get a Microsoft SQL Server **2017+**. SQL Express Edition is OK (when released), Azure SQL Database is OK, LocalDB does **NOT** work.
     * if you want to get SQL Express installed on the default instance (meaning you will not have to include the instance name), you can use this [Chocolatey](chocolatey.org) command `choco install sql-server-express -ia "/IACCEPTSQLSERVERLICENSETERMS /Q /ACTION=install /INSTANCEID=MSSQLSERVER /INSTANCENAME=MSSQLSERVER /UPDATEENABLED=FALSE" -o -y`

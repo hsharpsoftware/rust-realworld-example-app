@@ -15,4 +15,3 @@ if errorlevel 1 (
   exit /b %errorlevel%
 )
 taskkill /F /IM server.exe
-exit 0
