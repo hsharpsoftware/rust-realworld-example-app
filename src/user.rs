@@ -252,6 +252,10 @@ pub fn authentication_handler(mut req: Request, mut res: Response, _: Captures) 
                                     }
                                 )
                             );
+                            res.headers_mut().set(
+                                AccessControlAllowOrigin::Any
+                            );
+                            
                             *res.status_mut() = StatusCode::Ok;
                             result = result2;
                         }

@@ -48,6 +48,7 @@ use std::path::PathBuf;
 use hyper::server::{Server, Request, Response};
 use reroute::{RouterBuilder, Captures};
 use hyper::status::StatusCode;
+use hyper::header::{AccessControlAllowOrigin};
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -350,7 +351,7 @@ fn prepare_parameters( mut req: Request ) -> (String, i32) {
 }
 
 fn process<'a, T>(
-        res: Response, 
+        mut res: Response, 
         sql_command : &'static str,
         sql_select_command : &'static str,
         get_t_from_row : fn(tiberius::query::QueryRow) -> Option<T>,
@@ -372,6 +373,10 @@ fn process<'a, T>(
             sql.run(get_cmd).unwrap(); 
         }
 
+        res.headers_mut().set(
+            AccessControlAllowOrigin::Any
+        );
+
         if result.is_some() {
             let result = result.unwrap();
             let result = serde_json::to_string(&result).unwrap();
@@ -381,7 +386,7 @@ fn process<'a, T>(
 }
 
 fn process_container<'a, T, U>(
-        res: Response, 
+        mut res: Response, 
         sql_command : &'static str,
         sql_select_command : &'static str,
         get_t_from_row : fn(tiberius::query::QueryRow) -> Option<T>,
@@ -403,6 +408,10 @@ fn process_container<'a, T, U>(
         );
         sql.run(get_cmd).unwrap(); 
     }
+
+    res.headers_mut().set(
+        AccessControlAllowOrigin::Any
+    );
 
     let result = U::create_new_with_items(items);
     let result = serde_json::to_string(&result).unwrap();
@@ -471,7 +480,7 @@ fn create_db_handler(mut req: Request, mut res: Response, _: Captures) {
 }
 
 
-fn get_tags_handler(_: Request, res: Response, _: Captures) {
+fn get_tags_handler(_: Request, mut res: Response, _: Captures) {
     let mut result : Option<GetTagsResult> = None; 
 
     {
@@ -489,6 +498,10 @@ fn get_tags_handler(_: Request, res: Response, _: Captures) {
         );
         sql.run(get_tags_cmd).unwrap(); 
     }
+
+    res.headers_mut().set(
+        AccessControlAllowOrigin::Any
+    );
 
     if result.is_some() {
         let result = result.unwrap();
