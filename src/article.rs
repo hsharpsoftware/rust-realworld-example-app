@@ -188,9 +188,8 @@ order by Articles.Id DESC OFFSET @p2 ROWS FETCH NEXT @p3 ROWS Only"#,
     );
 }
 
-pub fn list_article_handler(mut req: Request, res: Response, c: Captures) {
-    let mut body = String::new();
-    let _ = req.read_to_string(&mut body); 
+pub fn list_article_handler(req: Request, res: Response, c: Captures) {
+    let (_, logged_id) = prepare_parameters( req );
 
     let caps = c.unwrap();
     let url_params = &caps[0].replace("/api/articles?", "");
@@ -199,97 +198,60 @@ pub fn list_article_handler(mut req: Request, res: Response, c: Captures) {
 
     let parsed_params: Vec<&str> = url_params.split('&').collect();
 
-    let mut where_clause = String::new();
-
-    let mut limit = "20";
-    let mut offset = "0";
+    let mut limit :i32 = 20;
+    let mut offset :i32 = 0;
+    let mut tag = "";
+    let mut author = "";
+    let mut favorited = "";
 
     for param in &parsed_params {
         let name_value: Vec<&str> = param.split('=').collect();
 
         if name_value[0] == "tag" {
-            where_clause.push_str("
-                INNER JOIN ArticleTags at 
-                    ON a.Id = at.ArticleId
-                INNER JOIN Users u 
-	                ON a.Author = u.Id
-                INNER JOIN Tags t
-                    ON at.TagId = t.Id AND t.Tag='");
-            where_clause.push_str(name_value[1]);
-            where_clause.push_str("' ");
+            tag = name_value[1];
         } 
         else if name_value[0] == "author" {
-            where_clause.push_str("
-                INNER JOIN Users u 
-	                ON a.Author = u.Id AND u.UserName = '");
-            where_clause.push_str(name_value[1]);
-            where_clause.push_str("' ");
+            author = name_value[1];
         }
         else if name_value[0] == "favorited" {
-            where_clause.push_str("
-                INNER JOIN FavoritedArticles fa 
-	                ON a.Id = fa.ArticleId
-                INNER JOIN Users u
-	                ON fa.UserId = u.Id AND u.UserName='");
-            where_clause.push_str(name_value[1]);
-            where_clause.push_str("'");
+            favorited = name_value[1];
         }
         else if name_value[0] == "offset" {
-            offset = name_value[1];
+            offset = name_value[1].parse::<i32>().unwrap();
         }
         else if name_value[0] == "limit" {
-            limit = name_value[1];
+            limit = name_value[1].parse::<i32>().unwrap();
         }
         ;
     }
 
-    let mut select_clause = String::from("SELECT Slug, Title, Description, Body, Created, Updated, UserName, Bio, Image from Articles a ");
-    select_clause.push_str(&where_clause);
-    select_clause.push_str("order by a.Id ASC OFFSET ");
-    select_clause.push_str(&offset);
-    select_clause.push_str("  ROWS ");
-    select_clause.push_str("FETCH NEXT ");
-    select_clause.push_str(&limit);
-    select_clause.push_str(" ROWS ONLY");
+    process_container(
+        res,
+        r#"declare @logged int = @p1;
+declare @tag nvarchar(max) = @p4;
+declare @username nvarchar(max) = @p5;
+declare @favorited nvarchar(max) = @p6;        
+        "#,
+        r#"SELECT Slug, Title, [Description], Body, Created, Updated, Users.UserName, Users.Bio, Users.[Image], 
+        (SELECT COUNT(*) FROM Followings WHERE FollowerId=@logged AND Author=FollowingId) as [Following],
+        (SELECT COUNT(*) FROM FavoritedArticles WHERE ArticleId = Articles.Id ) as FavoritesCount,
+        (SELECT COUNT(*) FROM FavoritedArticles WHERE UserId = @logged ) as PersonalFavoritesCount,
+		(SELECT STRING_AGG(Tag, ',') FROM [Tags] inner join ArticleTags on ArticleTags.TagId = Tags.Id where ArticleId=Articles.Id)  as Tags
+        FROM Articles INNER JOIN Users on Author=Users.Id  
+		
+		WHERE Articles.Id in ( SELECT ArticleId from ArticleTags WHERE TagId IN ( Select Id from Tags where Tag = @tag OR LEN(@tag) = 0 )  ) 
+		/*inner join ArticleTags on ArticleTags.ArticleId = Articles.id 
+		inner join Tags on Tags.Id = ArticleTags.TagId and Tag = @tag OR LEN(@tag) = 0*/
+		
+		AND Articles.Author in ( SELECT Id from Users where UserName = @username OR LEN(@username) = 0 ) 
 
-    println!("select_clause: {}", select_clause);
+		AND Articles.Id in ( SELECT ArticleId from FavoritedArticles WHERE UserId IN ( SELECT Id from Users where UserName = @favorited OR LEN(@favorited) = 0 )  ) 
 
-    let sql_command: Statement = Statement::from(select_clause);
-
-    let mut articles : Vec<Article> = Vec::new(); 
-    {
-        let mut sql = Core::new().unwrap();
-        let get_cmd = SqlConnection::connect(sql.handle(), CONNECTION_STRING.as_str() )
-            .and_then(|conn| conn.query(sql_command, &[])
-            .for_each_row(|row| {
-                let slug : &str = row.get(0);
-                let title : &str = row.get(1);
-                let description : &str = row.get(2);
-                let body : &str = row.get(3);
-                let created_at : NaiveDateTime = row.get(4);
-                let updated_at : Option<chrono::NaiveDateTime> = row.get(5);
-                let user_name : &str = row.get(6);
-                let bio : Option<&str> = row.get(7);
-                let image :Option<&str> = row.get(8);
-                
-                let tag_list : Vec<String> = Vec::new();
-                let favorited : bool = true;
-                let favorites_count : i32 = 3;
-                let author = Profile{ username:user_name.to_string(), bio:bio.map(|s| s.to_string()), image:image.map(|s| s.to_string()), following:false };
-                let art = Article{ 
-                    slug:slug.to_string(), title:title.to_string(), description:description.to_string(), body:body.to_string(), tagList:tag_list, createdAt:created_at, updatedAt:updated_at, favorited:favorited, favoritesCount:favorites_count, author:author
-                };
-                articles.push(art);
-                Ok(())
-            })
-        );
-        sql.run(get_cmd).unwrap(); 
-    }
-
-    let result = ArticlesResult{articles:articles};
-    let result = serde_json::to_string(&result).unwrap();
-    let result : &[u8] = result.as_bytes();
-    res.send(&result).unwrap();                        
+order by Articles.Id DESC OFFSET @p2 ROWS FETCH NEXT @p3 ROWS Only"#,
+        get_simple_article_from_row,
+        articles_result,
+        &[&logged_id, &offset, &limit, &tag, &author, &favorited]
+    );                       
 }
 
 pub fn get_article_handler(req: Request, res: Response, c: Captures) {
