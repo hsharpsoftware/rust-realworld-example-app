@@ -24,6 +24,7 @@ jwt="*"
 futures-state-stream = "*"
 slug = "*"
 rand = "0.3"
+unicase = "1.4.0"
 
 [features]
 default = []

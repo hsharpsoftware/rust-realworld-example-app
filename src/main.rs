@@ -32,6 +32,8 @@ extern crate slug;
 
 extern crate rand;
 
+extern crate unicase;
+
 use futures::Future;
 use tokio_core::reactor::Core;
 use tiberius::{SqlConnection};
@@ -48,7 +50,7 @@ use std::path::PathBuf;
 use hyper::server::{Server, Request, Response};
 use reroute::{RouterBuilder, Captures};
 use hyper::status::StatusCode;
-use hyper::header::{AccessControlAllowOrigin};
+use hyper::header::{AccessControlAllowOrigin, AccessControlAllowHeaders};
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -350,6 +352,8 @@ fn prepare_parameters( mut req: Request ) -> (String, i32) {
     (body, logged_id)
 }
 
+use unicase::UniCase;
+
 fn process<'a, T>(
         mut res: Response, 
         sql_command : &'static str,
@@ -375,6 +379,9 @@ fn process<'a, T>(
 
         res.headers_mut().set(
             AccessControlAllowOrigin::Any
+        );
+        res.headers_mut().set(
+            AccessControlAllowHeaders(vec![UniCase("content-type".to_owned())])
         );
 
         if result.is_some() {
@@ -412,6 +419,9 @@ fn process_container<'a, T, U>(
     res.headers_mut().set(
         AccessControlAllowOrigin::Any
     );
+    res.headers_mut().set(
+        AccessControlAllowHeaders(vec![UniCase("content-type".to_owned())])
+    );    
 
     let result = U::create_new_with_items(items);
     let result = serde_json::to_string(&result).unwrap();
@@ -478,7 +488,14 @@ fn create_db_handler(mut req: Request, mut res: Response, _: Captures) {
         *res.status_mut() = StatusCode::Unauthorized;        
     }
 }
-
+fn options_handler(_: Request, mut res: Response, _: Captures) {
+    res.headers_mut().set(
+        AccessControlAllowOrigin::Any
+    );    
+    res.headers_mut().set(
+        AccessControlAllowHeaders(vec![UniCase("content-type".to_owned())])
+    );    
+}
 
 fn get_tags_handler(_: Request, mut res: Response, _: Captures) {
     let mut result : Option<GetTagsResult> = None; 
@@ -543,6 +560,7 @@ fn main() {
     builder.get(r"/api/articles/.*/comments", get_comments_handler);  
     builder.get(r"/api/articles/.*", get_article_handler);  
     builder.get(r"/api/articles?.*", list_article_handler); 
+    builder.options("/api/.*", options_handler);
 
     let router = builder.finalize().unwrap(); 
 

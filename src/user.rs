@@ -223,6 +223,7 @@ pub fn follow_handler(req: Request, res: Response, c: Captures) {
     ); 
 }
 
+use unicase::UniCase;
 
 pub fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
     let mut body = String::new();
@@ -255,7 +256,10 @@ pub fn authentication_handler(mut req: Request, mut res: Response, _: Captures) 
                             res.headers_mut().set(
                                 AccessControlAllowOrigin::Any
                             );
-                            
+                            res.headers_mut().set(
+                                AccessControlAllowHeaders(vec![UniCase("content-type".to_owned())])
+                            );                            
+
                             *res.status_mut() = StatusCode::Ok;
                             result = result2;
                         }
