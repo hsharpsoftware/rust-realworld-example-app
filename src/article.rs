@@ -24,16 +24,6 @@ extern crate futures_state_stream;
 
 extern crate slug;
 
-use futures::Future;
-use tokio_core::reactor::Core;
-use tiberius::{SqlConnection};
-use tiberius::stmt::ResultStreamExt;
-use tiberius::stmt::Statement;
-
-use chrono::prelude::*;
-
-use std::io::prelude::*;
-
 use hyper::server::{Request, Response};
 use reroute::{Captures};
 
