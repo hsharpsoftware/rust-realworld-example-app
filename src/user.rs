@@ -224,6 +224,8 @@ pub fn follow_handler(req: Request, res: Response, c: Captures) {
 }
 
 use unicase::UniCase;
+use hyper::header::{ContentType};
+use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 
 pub fn authentication_handler(mut req: Request, mut res: Response, _: Captures) {
     let mut body = String::new();
@@ -259,6 +261,10 @@ pub fn authentication_handler(mut req: Request, mut res: Response, _: Captures) 
                             res.headers_mut().set(
                                 AccessControlAllowHeaders(vec![UniCase("content-type".to_owned())])
                             );                            
+                            res.headers_mut().set(
+                                ContentType(Mime(TopLevel::Application, SubLevel::Json,
+                                            vec![(Attr::Charset, Value::Utf8)]))
+                            );  
 
                             *res.status_mut() = StatusCode::Ok;
                             result = result2;

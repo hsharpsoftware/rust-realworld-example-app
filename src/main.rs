@@ -353,6 +353,8 @@ fn prepare_parameters( mut req: Request ) -> (String, i32) {
 }
 
 use unicase::UniCase;
+use hyper::header::{ContentType};
+use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 
 fn process<'a, T>(
         mut res: Response, 
@@ -383,6 +385,10 @@ fn process<'a, T>(
         res.headers_mut().set(
             AccessControlAllowHeaders(vec![UniCase("content-type".to_owned())])
         );
+        res.headers_mut().set(
+            ContentType(Mime(TopLevel::Application, SubLevel::Json,
+                        vec![(Attr::Charset, Value::Utf8)]))
+        );            
 
         if result.is_some() {
             let result = result.unwrap();
@@ -422,7 +428,11 @@ fn process_container<'a, T, U>(
     res.headers_mut().set(
         AccessControlAllowHeaders(vec![UniCase("content-type".to_owned())])
     );    
-
+    res.headers_mut().set(
+        ContentType(Mime(TopLevel::Application, SubLevel::Json,
+                    vec![(Attr::Charset, Value::Utf8)]))
+    );            
+    
     let result = U::create_new_with_items(items);
     let result = serde_json::to_string(&result).unwrap();
     let result : &[u8] = result.as_bytes();
@@ -495,6 +505,10 @@ fn options_handler(_: Request, mut res: Response, _: Captures) {
     res.headers_mut().set(
         AccessControlAllowHeaders(vec![UniCase("content-type".to_owned())])
     );    
+    res.headers_mut().set(
+        ContentType(Mime(TopLevel::Application, SubLevel::Json,
+                     vec![(Attr::Charset, Value::Utf8)]))
+    );    
 }
 
 fn get_tags_handler(_: Request, mut res: Response, _: Captures) {
@@ -519,6 +533,10 @@ fn get_tags_handler(_: Request, mut res: Response, _: Captures) {
     res.headers_mut().set(
         AccessControlAllowOrigin::Any
     );
+    res.headers_mut().set(
+        ContentType(Mime(TopLevel::Application, SubLevel::Json,
+                    vec![(Attr::Charset, Value::Utf8)]))
+    );            
 
     if result.is_some() {
         let result = result.unwrap();
