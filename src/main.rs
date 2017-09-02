@@ -383,7 +383,7 @@ fn process<'a, T>(
             AccessControlAllowOrigin::Any
         );
         res.headers_mut().set(
-            AccessControlAllowHeaders(vec![UniCase("content-type".to_owned())])
+            AccessControlAllowHeaders(vec![UniCase("content-type".to_owned()), UniCase("authorization".to_owned())])
         );
         res.headers_mut().set(
             ContentType(Mime(TopLevel::Application, SubLevel::Json,
@@ -426,7 +426,7 @@ fn process_container<'a, T, U>(
         AccessControlAllowOrigin::Any
     );
     res.headers_mut().set(
-        AccessControlAllowHeaders(vec![UniCase("content-type".to_owned())])
+        AccessControlAllowHeaders(vec![UniCase("content-type".to_owned()), UniCase("authorization".to_owned())])
     );    
     res.headers_mut().set(
         ContentType(Mime(TopLevel::Application, SubLevel::Json,
@@ -503,7 +503,7 @@ fn options_handler(_: Request, mut res: Response, _: Captures) {
         AccessControlAllowOrigin::Any
     );    
     res.headers_mut().set(
-        AccessControlAllowHeaders(vec![UniCase("content-type".to_owned())])
+        AccessControlAllowHeaders(vec![UniCase("content-type".to_owned()), UniCase("authorization".to_owned())])
     );    
     res.headers_mut().set(
         ContentType(Mime(TopLevel::Application, SubLevel::Json,
